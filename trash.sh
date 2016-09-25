@@ -780,6 +780,56 @@ Get_Trashlog_Bak()
     done
 }
 
+Write_Log() 
+{
+    local ID_Line Trashlog_Bak _ID_File _ID_RE
+    if [ "x${IDS}" = x ] ; then
+        exit 1
+    fi
+
+    ID_Line=`printf "${IDS}\n" | awk -F: '$0 !~ /^$/ {
+                                            if (Var[$1]=="") 
+                                                Var[$1]=$2
+                                            else 
+                                                Var[$1]=Var[$1]"|"$2
+                                         }
+                                         END{
+                                                for (i in Var) 
+                                                    print i":"Var[i]
+                                            }'
+            `
+    for _ID_Line in $ID_Line ; do
+        _ID_File=`echo $_ID_Line | cut -d: -f1`
+        _ID_RE=`echo $_ID_Line | cut -d: -f2`
+
+        Get_Trashlog_Bak ${_ID_File}
+
+        if [ "x$Trashlog_Bak" != "x" ] ; then
+            [ -e $Trashlog_Bak ] && $realrm -rf -- $Trashlog_Bak 2>/dev/null
+            cp -p --  $_ID_File  $Trashlog_Bak 2>/dev/null
+            awk 'NR !~ /'"$_ID_RE"'/' $_ID_File > $Trashlog_Bak 2>/dev/null
+            if [ ! -s $Trashlog_Bak ] ; then
+                $realrm -f -- $Trashlog_Bak $_ID_File 2>/dev/null
+            else
+                mv -- $Trashlog_Bak $_ID_File 2>/dev/null
+            fi
+        else
+            printf "\033[1m but write log: $_ID_File failed, perform again with user: root\33[0m\n"
+        fi
+    done
+}
+
+Delete_Parent_Dir()
+{
+    local Filename=$1
+    if [ `ls -A -- ${Filename%/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
+        rmdir -- ${Filename%/*} 2>/dev/null
+    fi
+    if [ `ls -A -- ${Filename%/*/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
+        rmdir -- ${Filename%/*/*} 2>/dev/null
+    fi
+}
+
 if [ $# -eq 0 ] || ! echo  -- "$@" | sed 's/^--[[:space:]]*//' | grep -qE -- "-"
 then
     USAGE
@@ -869,12 +919,7 @@ do
                         if [ `echo -- "$_Path" | sed 's/^--[[:space:]]*//' | wc -l` -eq  1 ] && ls -- "$_Path" >/dev/null 2>&1 ; then
                             if $realrm -rf -- "$_Path" >/dev/null 2>&1
                             then
-                                if [ `ls -A -- ${_Path%/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                    rmdir -- ${_Path%/*} 2>/dev/null
-                                fi
-                                if [ `ls -A -- ${_Path%/*/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                    rmdir -- ${_Path%/*/*} 2>/dev/null
-                                fi
+                                Delete_Parent_Dir "$_Path"
 
                                 IDS="${IDS}\n`awk 'NR == '"$_ID"' {print FILENAME":"FNR}' $Hist_List 2>/dev/null`"
 
@@ -886,12 +931,7 @@ do
                                 continue
                             fi
                         else
-                            if [ `ls -A -- ${_Path%/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                rmdir -- ${_Path%/*} 2>/dev/null
-                            fi
-                            if [ `ls -A -- ${_Path%/*/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                rmdir --  ${_Path%/*/*} 2>/dev/null
-                            fi
+                             Delete_Parent_Dir "$_Path"
 
                             IDS="${IDS}\n`awk 'NR == '"$_ID"' {print FILENAME":"FNR}' $Hist_List 2>/dev/null`"
 
@@ -899,37 +939,7 @@ do
                         fi
                     done
 
-                    if [ "x${IDS}" = x ] ; then
-                        exit 1
-                    fi
-
-                    ID_Line=`printf "${IDS}\n" | awk -F: '$0 !~ /^$/ {
-                                                            if (Var[$1]=="") 
-                                                                Var[$1]=$2
-                                                            else 
-                                                                Var[$1]=Var[$1]"|"$2
-                                                         }
-                                                         END{
-                                                                for (i in Var) 
-                                                                    print i":"Var[i]
-                                                            }'
-                            `
-                    for _ID_Line in $ID_Line ; do
-                        _ID_File=`echo $_ID_Line | cut -d: -f1`
-                        _ID_RE=`echo $_ID_Line | cut -d: -f2`
-
-                        unset Trashlog_Bak
-                        Get_Trashlog_Bak ${_ID_File}
-
-                        if [ "x$Trashlog_Bak" != "x" ] ; then
-                            [ -e $Trashlog_Bak ] && $realrm -rf -- $Trashlog_Bak 2>/dev/null
-                            cp -p --  $_ID_File  $Trashlog_Bak 2>/dev/null
-                            awk 'NR !~ /'"$_ID_RE"'/' $_ID_File > $Trashlog_Bak 2>/dev/null
-                            mv -- $Trashlog_Bak $_ID_File  2>/dev/null
-                        else
-                            printf "\033[1m but write log: $_ID_File failed, perform again with user: root\33[0m\n"
-                        fi
-                    done
+                    Write_Log
                 fi
             }
             ;;
@@ -963,11 +973,8 @@ do
                         [ "x${Dst_path}" != x ] && _Spath=${Dst_path}/`echo $_Sfile | sed 's#_[^_]*$##;s#_[^_]*$##'`
 
                         if [ "x${_No_Print}" != "xyes" ] ; then
-                            _Print_Path=`echo -- "$_Path" | sed 's/--[[:space:]]*//;s#%#%%#g'`
-                        fi
-
-                        if [ "x${_No_Print}" != "xyes" ] ; then
                             _Print_Spath=`echo -- "$_Spath" | sed 's/--[[:space:]]*//;s#%#%%#g'`
+                            _Print_Path=`echo -- "$_Path" | sed 's/--[[:space:]]*//;s#%#%%#g'`
                         fi
 
                         
@@ -980,12 +987,7 @@ do
                                 if [ "x$R_Copy" != "xyes" ] ; then
                                     if mv -- $_Path $_Spath >/dev/null 2>&1
                                     then
-                                        if [ `ls -A -- ${_Path%/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                            rmdir -- ${_Path%/*} 2>/dev/null
-                                        fi
-                                        if [ `ls -A -- ${_Path%/*/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                            rmdir -- ${_Path%/*/*} 2>/dev/null
-                                        fi
+                                        Delete_Parent_Dir "$_Path"
 
                                         IDS="${IDS}\n`awk 'NR == '"$_ID"' {print FILENAME":"FNR}' $Hist_List 2>/dev/null`"
 
@@ -1009,12 +1011,7 @@ do
                                 fi
                             fi
                         else
-                            if [ `ls -A -- ${_Path%/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                rmdir -- ${_Path%/*} 2>/dev/null
-                            fi
-                            if [ `ls -A -- ${_Path%/*/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                rmdir -- ${_Path%/*/*} 2>/dev/null
-                            fi
+                            Delete_Parent_Dir "$_Path"
 
                             IDS="${IDS}\n`awk 'NR == '"$_ID"' {print FILENAME":"FNR}' $Hist_List 2>/dev/null`"
 
@@ -1023,38 +1020,7 @@ do
                         fi
                     done
 
-                    if [ "x${IDS}" = x ] ; then
-                        exit 1
-                    fi
-                    ID_Line=`printf "${IDS}\n"|awk -F: '$0!~/^$/{
-                                                                       if (Var[$1]=="") 
-                                                                           Var[$1]=$2
-                                                                       else 
-                                                                           Var[$1]=Var[$1]"|"$2
-                                                                    }
-                                                                    END{
-                                                                           for (i in Var) 
-                                                                               print i":"Var[i]
-                                                                       }'
-                           `
-                    for _ID_Line in $ID_Line ; do
-                       _ID_File=`echo $_ID_Line | cut -d: -f1`
-                       _ID_RE=`echo $_ID_Line | cut -d: -f2`
-
-                       unset Trashlog_Bak
-                       Get_Trashlog_Bak ${_ID_File}
-
-                       if [ "x$Trashlog_Bak" != "x" ] ; then
-                           [ -e $Trashlog_Bak ] && $realrm -rf -- $Trashlog_Bak 2>/dev/null
-                           cp -p --  $_ID_File  $Trashlog_Bak 2>/dev/null
-                           awk 'NR !~ /'"$_ID_RE"'/' $_ID_File > $Trashlog_Bak 2>/dev/null
-                           mv -- $Trashlog_Bak $_ID_File  2>/dev/null
-                           # printf "\n"
-                       else
-                            printf "\033[1m but write log: $_ID_File failed, perform again with user: root\33[0m\n"
-                       fi
-
-                    done
+                    Write_Log
                 fi
             }
             ;;
@@ -1073,77 +1039,40 @@ do
                 fi
 
                 if echo $reply | grep -qiE "y|ye|yes" || [ "x${_No_Print}" = "xyes" ] ; then
+                    
+                    _ID=0
+                    Line_Num=`awk 'END{print NR}'  $Hist_List 2>/dev/null`
+                    while [ $_ID -le $Line_Num ] ; do
+                        _ID=`expr $_ID + 1`
+                        _File=`awk 'NR == '"$_ID"' {print $NF}' $Hist_List 2>/dev/null`
+                        if [ "x${_No_Print}" != "xyes" ] ; then
+                            _Print_File=`echo -- "$_File" | sed 's/--[[:space:]]*//;s#%#%%#g'`
+                        fi
 
-                    for _Hist in $Hist_List ; do
-                        _ID=0
-                        while read line || [ -n "$line" ] ; do
-                            # _ID=`echo "$line" | awk '{print $1}'`
-                            _ID=`expr $_ID + 1`
-                            _File=`echo -- "$line" | sed 's/^--[[:space:]]*//' | awk '{print $NF}'`
-                            if [ "x${_No_Print}" != "xyes" ] ; then
-                                _Print_File=`echo -- "$_File" | sed 's/--[[:space:]]*//;s#%#%%#g'`
-                            fi
-                            if ls -- $_File >/dev/null 2>&1 ; then
-                                if $realrm -fr -- $_File ; then
-                                    if [ `ls -A -- ${_File%/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                        rmdir -- ${_File%/*} 2>/dev/null
-                                    fi
-                                    if [ `ls -A -- ${_File%/*/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                        rmdir -- ${_File%/*/*} 2>/dev/null
-                                    fi
-                                    # _ID_RE="${_ID_RE}\|""^[[:space:]]*$_ID[[:space:]][[:space:]]*"
-                                    # _ID_RE="${_ID_RE};/^[[:space:]]*$_ID[[:space:]][[:space:]]*/d"
-                                    _ID_RE="${_ID_RE}|_ID"
-                                    [ "x${_No_Print}" != "xyes" ] && \
-                                    printf "Delete $_Print_File succeed\n"
-                                else
-                                    [ "x${_No_Print}" != "xyes" ] && \
-                                    printf "\033[1mDelete $_Print_File failed\033[0m\n"
-                                    continue
-                                fi
-                            else
-                                if [ `ls -A -- ${_File%/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                    rmdir -- ${_File%/*} 2>/dev/null
-                                fi
-                                if [ `ls -A -- ${_File%/*/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
-                                    rmdir -- ${_File%/*/*} 2>/dev/null
-                                fi
-                                # _ID_RE="${_ID_RE}\|""^[[:space:]]*$_ID[[:space:]][[:space:]]*"
-                                # _ID_RE="${_ID_RE};/^[[:space:]]*$_ID[[:space:]][[:space:]]*/d"
-                                _ID_RE="${_ID_RE}|_ID"
+                       if [ `echo -- "$_File" | sed 's/^--[[:space:]]*//' | wc -l` -eq  1 ] && ls -- "$_File" >/dev/null 2>&1 ; then
+                            if $realrm -fr -- "$_File" ; then
+                            
+                                Delete_Parent_Dir "$_File"
+
+                                IDS="${IDS}\n`awk 'NR == '"$_ID"' {print FILENAME":"FNR}' $Hist_List 2>/dev/null`"
+                                
                                 [ "x${_No_Print}" != "xyes" ] && \
                                 printf "Delete $_Print_File succeed\n"
-                            fi
-                        done < $_Hist
-
-                        if [ "x${_ID_RE}" = x ] ; then
-                            exit 1
-                        fi
-
-                        unset Trashlog_Bak
-                        Get_Trashlog_Bak $_Hist
-                        
-
-                        if [ "x$Trashlog_Bak" != "x" ] ; then
-                            [ -e $Trashlog_Bak ] && $realrm -rf -- $Trashlog_Bak 2>/dev/null
-                            cp -p -- $_Hist $Trashlog_Bak 2>/dev/null
-                            # sed '/'"${_ID_RE#\\|}"'/d;s/^[[:space:]]*[[:digit:]]*[[:space:]][[:space:]]*//g' $_Hist > ${_Hist}.bak
-                            # sed ''"${_ID_RE#;}"';s/^[[:space:]]*[[:digit:]]*[[:space:]][[:space:]]*//g' $_Hist > ${_Hist}.bak 2>/dev/null
-                            awk 'NR !~ /'"${_ID_RE#[[:space:]]*\|}"'/' $_Hist > $Trashlog_Bak 2>/dev/null
-
-                            if [ ! -s $Trashlog_Bak ] ; then
-                                $realrm -f -- $Trashlog_Bak $_Hist 2>/dev/null
                             else
-                                # sort -r -k2 -k3 -o ${_Hist}.bak ${_Hist}.bak 2>/dev/null
-                                ## _len=$(awk '{ len=(length($1)>a?length($1):a)};END{print len}' ${_Hist}.bak)
-                                # awk '{printf "%-'"$(cat -- ${_Hist}.bak 2>/dev/null|wc -l|wc -c )"'d %s\n",NR,$0}'  ${_Hist}.bak > $_Hist 2>/dev/null
-                                mv -- $Trashlog_Bak $_Hist 2>/dev/null
+                                [ "x${_No_Print}" != "xyes" ] && \
+                                printf "\033[1mDelete $_Print_File failed\033[0m\n"
+                                continue
                             fi
                         else
-                            printf "\033[1m, but write log: $_Hist failed, perform again with user: root\33[0m\n"
-                        fi
+                            Delete_Parent_Dir "$_File"
 
+                            IDS="${IDS}\n`awk 'NR == '"$_ID"' {print FILENAME":"FNR}' $Hist_List 2>/dev/null`"
+
+                            [ "x${_No_Print}" != "xyes" ] && \
+                            printf "Delete $_Print_File succeed\n"
+                        fi
                     done
+                    Write_Log
                 fi
             }
             ;;
@@ -1362,10 +1291,13 @@ Get_Hist_List()
     local Home_Dir _Home_Dir _Log_Dir _Log
     unset Home_Dir _Home_Dir _Log_Dir _Log  Hist_List _No_List_Log
 
-    # [ x"$User_List" = "x" ] && User_List=`id -un`
-    # [ x"$User_List_Print" = "x" ] && User_List_Print=`id -un`
-    [ x"$User_List" = "x" ] && User_List="."
-    [ x"$User_List_Print" = "x" ] && User_List_Print="all users"
+    if [ x"$_Recycle" = "xyes" ] ; then
+        [ x"$User_List" = "x" ] && User_List=`id -un`
+        [ x"$User_List_Print" = "x" ] && User_List_Print=`id -un`
+    elif [ x"$_Find" = "xyes" ] ; then
+        [ x"$User_List" = "x" ] && User_List="."
+        [ x"$User_List_Print" = "x" ] && User_List_Print="all users"
+    fi
 
     # Get Hist_List
     Home_Dir=`awk -F: '$NF !~ /nologin$|false$/ {print $6}' /etc/passwd 2>/dev/null | sort -u | grep -vE "^$"`
@@ -1522,7 +1454,7 @@ do
                         for  _Date_Dir in `ls -A -- $_Trash_Dir 2>/dev/null | grep -v "[^[[:digit:]]" ` ; do
                             for _User_Dir in `ls  -A -- ${_Trash_Dir}/${_Date_Dir} 2>/dev/null | grep -E "$User_List" 2>/dev/null` ; do
                                 for _File in `ls  -A -- ${_Trash_Dir}/${_Date_Dir}/${_User_Dir} 2>/dev/null` ; do
-                                    if ! grep -qF "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" $Hist_List 2>/dev/null ; then
+                                    if ! grep -qFw "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" $Hist_List 2>/dev/null ; then
                                         if [ "x${_No_Print}" != "xyes" ] ; then
                                             Print_filename=`echo -- "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" | sed 's/--[[:space:]]*//;s#%#%%#g'`
                                             printf "Find $Print_filename"

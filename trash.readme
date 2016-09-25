@@ -33,8 +33,6 @@
     * 为提高执行效率，最好初始化日志目录和回收站目录
         sh trash.sh -f
 
-
-
     1、需修改/tmp目录权限
         chmod 777 /tmp
         chmod +t /tmp
@@ -162,7 +160,6 @@ cleantrash -h
                            special user:"all" and "unknow"
                            all:list trash history of all users
                            unknow: deleted files in trash directory, find by "cleantrash"
-
 #################################################################################################################
 
 示例：
@@ -179,7 +176,6 @@ rr='unrm -r'
 
 #################################################################################################################
 # 回收
-
 [root@localhost root]#pwd
 /root/a
 [root@localhost root]#rla
@@ -206,7 +202,6 @@ ID User Date       Time     SourcePath TrashPath
 7  root 2016-09-24 13:28:42 /root/a/a  /.trash/20160924/root
 8  root 2016-09-24 13:28:42 /root/a/1  /.trash/20160924/root
 #################################################################################################################
-
 # 还原
 [root@localhost root]#mkdir /tmp/test
 [root@localhost root]#rr  1 -P /tmp/test -n 
@@ -264,7 +259,6 @@ ID User   Date       Time     SourcePath               TrashPath
 
 #################################################################################################################
 # 特殊字符支持
-
 [root@localhost tmp]# ls
 ~`!@#$%^&*()_-+={[}]|\:;'",<.>?
 
