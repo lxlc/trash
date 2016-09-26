@@ -7,8 +7,8 @@
     4、所有相关的操作,均保留文件的原始权限,避免未经授权的访问
     5、非root用户,仅可操作自己回收的文件,root用户可操作所有用户回收的文件
     6、文件名支持特殊字符(空白符除外)
-    7、保护挂载分区、重要目录不被删除,如:
-           / /boot /bin /sbin /lib /lib64 /usr /var /home /opt /etc 
+    7、保护挂载分区、/ 分区下所有文件、/tmp不被删除,如:
+           / /boot /bin /sbin /lib /lib64 /usr /var /home /opt /etc /sys
            /proc /dev /net /root /tmp /cgroup /selinux /mnt /media
 
 脚本部署
@@ -97,7 +97,7 @@ delete -h
         Other variables like -i -f -r -R will be passed to /bin/rm 
 
         -f                    Ignore nonexistent files, never prompt
-        -F                    Use system command "rm"
+        -F                    Use system command "rm", but cannot delete preserved files
         -h, --help            Display this help and exit
         -i                    Prompt before every removal
         -r, -R                Remove directories and their contents recursively
