@@ -1552,7 +1552,7 @@ if [ "x$_Install_Alias" = "xyes" ] ; then
             alias rl   'unrm -l'
             alias rla  'unrm -l -u all'
             alias rd   'unrm -d'
-            alias rr      'unrm -r'
+            alias rr   'unrm -r'
 eof
 
         else
