@@ -1548,20 +1548,16 @@ if [ "x$_Install_Alias" = "xyes" ] ; then
              ' $_sh_file > /tmp/${_sh_file##*/}
         if echo $_sh_file | grep -q "cshrc" ; then
             cat >> /tmp/${_sh_file##*/} <<- eof
-            alias _rm  $realrm
             alias rm   "$delete_name -n"
-            alias rF   "$delete_name -F"
             alias rl   'unrm -l'
             alias rla  'unrm -l -u all'
             alias rd   'unrm -d'
-            alias rr   'unrm -r'
+            alias rr      'unrm -r'
 eof
 
         else
             cat >> /tmp/${_sh_file##*/} <<- eof
-            alias _rm=$realrm
             alias rm="$delete_name -n"
-            alias rF="$delete_name -F"
             alias rl='unrm -l'
             alias rla='unrm -l -u all'
             alias rd='unrm -d'
@@ -1576,9 +1572,7 @@ else
     if [ "x$_No_Print" != "xyes" ] ; then
     printf "\n\033[1m# Add following lines in your shell profile!\033[0m\n"
     cat <<- eof
-    alias _rm=$realrm
     alias rm="$delete_name -n"
-    alias rF="$delete_name -F"
     alias rl='unrm -l'
     alias rla='unrm -l -u all'
     alias rd='unrm -d'
