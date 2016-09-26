@@ -130,7 +130,7 @@ USAGE() {
 
     cat <<- 'EOF'
     -f                    Ignore nonexistent files, never prompt
-    -F                    Use system command "rm"
+    -F                    Use system command "rm", but cannot delete preserved files
     -h, --help            Display this help and exit
     -i                    Prompt before every removal
     -r, -R                Remove directories and their contents recursively
@@ -152,16 +152,39 @@ if [ $# -eq 0 ] ; then
     exit 1
 fi
 
+Get_FullPath()
+{
+    file=$1
+    unset fullpath
+    if echo $file|grep -qE "^/" 2>/dev/null; then
+        fullpath=$file
+    elif echo $file|grep -qE "^\./" 2>/dev/null ; then
+        fullpath="$(pwd)${file#\.}"
+    else
+        fullpath="$(pwd)/${file}"
+    fi
+    fullpath=`echo -- "$fullpath" | sed 's/--[[:space:]]*//;s#//*#/#g;s#/$##'`
+    [ "x$fullpath" = "x" ] && fullpath="/"
+}
+
 # Get mount point 
+# _Mount_RE="^/$|^/bin/*$|^/sbin/*$|^/usr/*$|^/lib(64)*/*$|\
+# ^/etc/*$|^/boot/*$|^/opt/*$|^/home/*$|^/sys/*$|\
+# ^/var/*$|^/proc/*$|^/dev/*$|^/cgroup/*$|\
+# ^/tmp/*$|^/root/*$|^/net/*$|^/selinux/*$|\
+# ^/mnt/*$|^/media/*$""${_Mount_RE}"
+
 unset _Mount_RE
-for _Mount_dir in $_mount /tmp; do
-    _Mount_RE="$_Mount_RE|""^${_Mount_dir}/*$"
+for _Mount_dir in `ls -A  / ` ; do
+    _Mount_RE="$_Mount_RE|""^/${_Mount_dir}/*\$"
 done
-_Mount_RE="^/bin/*$|^/sbin/*$|^/usr/*$|^/lib(64)*/*$|\
-^/etc/*$|^/boot/*$|^/opt/*$|^/home/*$|\
-^/var/*$|^/proc/*$|^/dev/*$|^/cgroup/*$|\
-^/tmp/*$|^/root/*$|^/net/*$|^/selinux/*$|\
-^/mnt/*$|^/media/*$""${_Mount_RE}"
+
+for _Mount_dir in $_mount /tmp; do
+    _Mount_RE="$_Mount_RE|""^${_Mount_dir}/*\$"
+done
+
+_Mount_RE="^/\$""$_Mount_RE"
+
 
 
 if echo -- "$@" | sed 's/^--[[:space:]]*//' | grep -qE -- "[[:space:]]*--[[:space:]][[:space:]]*" 2>/dev/null ; then
@@ -196,13 +219,13 @@ _Real_Argv=`echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | sed 's#\([[:space:]]*-
             `
 # Protect mounted partition
 for _File_check in $_Del_File ; do
-    if echo -- "$_File_check"| sed 's/--[[:space:]]*//' | grep -qE "${_Mount_RE}" 2>/dev/null ; then
-        printf "\033[1m$_File_check is preserved, otherwise, please exec:\n  $realrm\033[0m\n"
-        printf "OR:\n  \033[1m$0 -F\033[0m\n"
+    Get_FullPath "$_File_check"
+    if echo -- "$fullpath"| sed 's/--[[:space:]]*//' | grep -qE "${_Mount_RE}" 2>/dev/null ; then
+        printf "\033[1m$fullpath is preserved, if you really want to delete it, please perform:\033[0m\n    $realrm $fullpath\n"
+        # printf "OR:\n  \033[1m$0 -F\033[0m\n"
         exit 1
     fi
 done
-
 
 unset _No_Print
 if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -qE -- "n|N" 2>/dev/null; then
@@ -307,15 +330,7 @@ else
         fi
 
         # Get fullpath
-        unset fullpath
-        if echo $file|grep -qE "^/" 2>/dev/null; then
-            fullpath=$file
-        elif echo $file|grep -qE "^\./" 2>/dev/null ; then
-            fullpath="$(pwd)${file#\.}"
-        else
-            fullpath="$(pwd)/${file}"
-        fi
-        fullpath=`echo -- "$fullpath" | sed 's/--[[:space:]]*//;s#//*#/#g;s#/$##'`
+        Get_FullPath "$file"
 
         if [ "x${_No_Print}" != "xyes" ] ; then
             Print_fullpath=`echo -- "$fullpath" | sed 's/--[[:space:]]*//;s#%#%%#g'`
@@ -337,7 +352,7 @@ else
         # Get trash directory
         unset destpath
         for _path in $_mount /tmp ; do
-            if echo $fullpath | grep -q "${_path}" 2>/dev/null ; then
+            if echo $fullpath | grep -qF "${_path}" 2>/dev/null ; then
                 destpath=${_path}
                 break
             fi
@@ -1525,9 +1540,11 @@ if [ "x$_Install_Alias" = "xyes" ] ; then
     # User_Home=`awk -F: '$NF ~ /.*sh$/ {print $6}' /etc/passwd|sort -u|grep -vE "^/$|^$"`
     if [ "x$Shell_Config_Find_Path" != "x" ] ; then
         Find_Dir="$Shell_Config_Find_Path"
+        Profile_List=""
     else
         User_Home=`awk -F: '$NF !~ /nologin$|false$/ {print $6}' /etc/passwd | sort -u | grep -vE "^/$|^$"`
         Find_Dir="/etc/ $User_Home /.[!.]*"
+        Profile_List="/etc/profile"
     fi
 
     _Profile_List=
@@ -1537,7 +1554,7 @@ if [ "x$_Install_Alias" = "xyes" ] ; then
     _Profile_List="${_Profile_List} `find $Find_Dir -type f  -name ".*[!c]shrc" 2>/dev/null`"
     _Profile_List="${_Profile_List} `find $Find_Dir -type f  -name ".shrc" 2>/dev/null`"
     _Profile_List_Csh=`find $Find_Dir -type f  -name ".*cshrc" 2>/dev/null`
-    for _sh_file in $_Profile_List $_Profile_List_Csh /etc/profile; do
+    for _sh_file in $_Profile_List $_Profile_List_Csh $Profile_List; do
         sed  '/^[[:space:]]*alias[[:space:]]*_rm[[:space:]=]*/d;
               /^[[:space:]]*alias[[:space:]]*rm[[:space:]=]*/d;
               /^[[:space:]]*alias[[:space:]]*rF[[:space:]=]*/d;
