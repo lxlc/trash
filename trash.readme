@@ -262,8 +262,14 @@ ID User   Date       Time     SourcePath               TrashPath
 
 #################################################################################################################
 # 特殊字符支持
-[root@localhost tmp]# ls
+[root@localhost tmp]# ls /
 ~`!@#$%^&*()_-+={[}]|\:;'",<.>?
+
+root@vm-upayapp:/ # rm ~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\? 
+/~`!@#$%^&*()_-+={[}]|\:;'",<.>? is preserved, if you really want to delete it, please perform:
+    /usr/bin/rm /~`!@#$%^&*()_-+={[}]|\:;'",<.>?
+
+root@vm-upayapp:/ # mv /~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\?  /tmp
 
 [root@localhost tmp]# rm \~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\? 
 
@@ -299,7 +305,7 @@ ID User   Date       Time     SourcePath                       TrashPath
 
 [root@localhost tmp]# unrm -F -u all
 Empty the trash directory recycled by user: all users [YES/NO]:[NO]y
-Delete /tmp/.trash/20160924/root/~`!@#$%^&*()_-+={[}]|:;'",<.>?1 succeed
+Delete /tmp/.trash/20160924/root/~`!@#$%^&*()_-+={[}]|\:;'",<.>?1 succeed
 [root@localhost tmp]# rla
 [root@localhost tmp]# 
 #################################################################################################################

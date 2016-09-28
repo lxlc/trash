@@ -6,7 +6,7 @@
 #               cp mv rm rmdir mkdir chmod chown id grep sed awk head sort cut read cat
 # Compatibility OS: UNIX Linux (Tested:Linux/hpux/aix/freebsd)
 
-Install_Path=/bin
+Install_Path1=/bin
 
 USAGE() {
     echo "SYNOPSIS"
@@ -24,7 +24,45 @@ USAGE() {
 eof
 }
 
+Get_Trashlog_Bak()
+{
+    unset Trashlog_Bak
+    local Trashlog=$1
+    shift
+    local ParentDir=${Trashlog%/*}
+    local Logname=${Trashlog##*/}
+    local New_Name=$1
+    [ $# -ne 0 ] && shift
+    local All_Path="$@"
 
+    Home_Dir=`awk -F: '$1=="'"${Logname}"'" {print $6}' /etc/passwd`
+    [ "x$All_Path" = "x" ] && All_Path="$ParentDir $Home_Dir /tmp"
+    [ "x$New_Name" = "x" ] && New_Name="${Logname}.bak"
+  
+    for i in $All_Path ; do
+        if ! [ -d ${i} -a -w ${i} ] ; then
+            continue
+        else
+            local Num=1
+            Trashlog_Bak=${i}/${New_Name}
+            if [ ! -e $Trashlog_Bak -o \( -e $Trashlog_Bak -a -w $Trashlog_Bak \) ] ; then
+                break
+            else
+                Trashlog_Bak=${i}/${New_Name}${Num}
+                while [ $Num -le 9 -a ! \( ! -e $Trashlog_Bak -o \( -e $Trashlog_Bak -a -w $Trashlog_Bak \) \) ] ; do
+                    Num=`expr $Num + 1`
+                    Trashlog_Bak=${i}/${New_Name}${Num}
+                done
+
+                if [ ! $Num -le 9 -o ! \( ! -e $Trashlog_Bak -o \( -e $Trashlog_Bak -a -w $Trashlog_Bak \) \) ] ; then
+                    unset Trashlog_Bak
+                else
+                    break
+                fi
+            fi
+        fi
+    done
+}
 
 while getopts "ad:fhnp:P:" Option
 do
@@ -34,7 +72,7 @@ do
             ;;
 
         d)
-            Expire_Day="$OPTARG"
+            Expire_Day1="$OPTARG"
             ;;
         f)
             _Init_Fold=yes
@@ -48,7 +86,7 @@ do
             _No_Print=yes
             ;;
         p)
-            Install_Path="$OPTARG"
+            Install_Path1="$OPTARG"
             ;;
         P)
             Shell_Config_Find_Path=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#,,*# #g'`
@@ -63,29 +101,33 @@ done
 
 # Set Install_Path
 if [ "x$_No_Print" != "xyes" ] ; then
+    Install_Path=$Install_Path1
     until [ -w ${Install_Path} ] ; do
         printf "\033[1mYou have no write permission to ${Install_Path}, specify Install path:[/bin]\033[0m"
-        unset Install_Path
+        # unset Install_Path
         read Install_Path
-        [ "x$Install_Path" = "x" ] && Install_Path=/bin
+        [ "x$Install_Path" = "x" ] && Install_Path=$Install_Path1
     done
 else
-    if [ ! -w ${Install_Path} ] ; then
-        printf "\033[1mYou have no write permission to ${Install_Path}, specify it by -p\033[0m\n"
+    if [ ! -w ${Install_Path1} ] ; then
+        printf "\033[1mYou have no write permission to ${Install_Path1}, specify it by -p\033[0m\n"
         exit 1
+    else
+        Install_Path=$Install_Path1
     fi
 fi
 
 # Set Expire_Day
+[ "x${Expire_Day1}" = x ] && Expire_Day=30
 if [ "x$_No_Print" != "xyes" ] ; then
     printf "\033[1mSpecify expiration days of deleted files:[30]\033[0m"
     unset Expire_Day
     read Expire_Day
 fi
-[ "x${Expire_Day}" = x ] && Expire_Day=30
+[ "x${Expire_Day}" = x ] && Expire_Day=$Expire_Day1
 
 
-Def_Path="export PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:$Install_Path:\$PATH"
+Def_Path="export PATH=$Install_Path:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:\$PATH"
 sh_path=`find  /bin /sbin /usr/bin /usr/sbin /usr/local/bin /usr/local/sbin -name sh 2>/dev/null | head -1`
 realrm=`find  /bin /sbin /usr/bin /usr/sbin /usr/local/bin /usr/local/sbin -name rm 2>/dev/null | head -1`
 Root_Name=` awk -F: '$3 == 0 {print $1}' /etc/passwd | head -1`
@@ -167,31 +209,96 @@ Get_FullPath()
     [ "x$fullpath" = "x" ] && fullpath="/"
 }
 
+Get_Real_Argv()
+{
+
+    _Real_Argv=`echo -- "$ARGV" | sed 's/^--[[:space:]]*//;s#\([[:space:]]*-\)n\([[:alnum:]][[:alnum:]]*\)#\1\2#g; 
+                                    s#[[:space:]]*-n\([[:space:]]*\)#\1#g;
+                                    s#\([[:alnum:]]*\)n#\1#g;
+                                    s#\([[:space:]]*-\)F\([[:alnum:]][[:alnum:]]*\)#\1\2#g;
+                                    s#[[:space:]]*-F\([[:space:]]*\)#\1#g;
+                                    s#\([[:alnum:]]*\)F#\1#g;
+                                    s#\([[:space:]]*-\)N\([[:alnum:]][[:alnum:]]*\)#\1\2#g;
+                                    s#[[:space:]]*-N\([[:space:]]*\)#\1#g;
+                                    s#\([[:alnum:]]*\)N#\1#g;
+                                    '
+                `
+}
 # Get mount point 
 # _Mount_RE="^/$|^/bin/*$|^/sbin/*$|^/usr/*$|^/lib(64)*/*$|\
 # ^/etc/*$|^/boot/*$|^/opt/*$|^/home/*$|^/sys/*$|\
 # ^/var/*$|^/proc/*$|^/dev/*$|^/cgroup/*$|\
 # ^/tmp/*$|^/root/*$|^/net/*$|^/selinux/*$|\
 # ^/mnt/*$|^/media/*$""${_Mount_RE}"
+# unset _Mount_RE
+# for _Mount_dir in `ls -a  / | grep -vE '^\.$|^\.\.$'` ; do
+#     _Mount_dir=$(echo -- "$_Mount_dir" | sed 's/^--[[:space:]]*//;s#\\#\\\\#g;
+#                                                                   s#\*#\\*#g;
+#                                                                   s#\.#\\.#g;
+#                                                                   s#\?#\\?#g;
+#                                                                   s#\+#\\+#g;
+#                                                                   s#(#\\(#g;
+#                                                                   s#)#\\)#g;
+#                                                                   s#|#\\|#g;
+#                                                                   s#\[#\\[#g;
+#                                                                   s#\]#\\]#g;
+#                                                                   s#\^#\\^#g;
+#                                                                   s#\$#\\$#g
+#                                             '
+#                )
+#     _Mount_RE="$_Mount_RE|""^/${_Mount_dir}/*\$"
+# done
 
-unset _Mount_RE
-for _Mount_dir in `ls -A  / ` ; do
-    _Mount_RE="$_Mount_RE|""^/${_Mount_dir}/*\$"
-done
+    unset Mount_List
+    Mount_List=`ls -a / | grep -vE '^\.$|^\.\.$' | sed 's#^\([^/]*\)#/\1#'`
 
-for _Mount_dir in $_mount /tmp; do
-    _Mount_RE="$_Mount_RE|""^${_Mount_dir}/*\$"
-done
+    Mount_List="$Mount_List"" $_mount"" / /tmp"
 
-_Mount_RE="^/\$""$_Mount_RE"
 
 
 
 if echo -- "$@" | sed 's/^--[[:space:]]*//' | grep -qE -- "[[:space:]]*--[[:space:]][[:space:]]*" 2>/dev/null ; then
-    ARGV=`echo -- "$@" | sed 's/^--[[:space:]]*//' | sed 's#\([[:space:]]*--\)[[:space:]][[:space:]]*.*#\1#g' 2>/dev/null`
+    ARGV=`echo -- "$@" | sed 's/^--[[:space:]]*//;
+                              s#^\(--\)[[:space:]][[:space:]]*.*#\1#;
+                              s#\([[:space:]][[:space:]]*--\)[[:space:]][[:space:]]*.*#\1#;
+                              s#[[:space:]]*[[:graph:]][[:graph:]]*--*[[:graph:]][[:graph:]]*##g;
+                              s#^[^-][^-]*##;
+                              s#[[:space:]][[:space:]]*[^-][^-]*##g
+                              '
+        `
+    _Del_File1=`echo -- "$@" | sed 's/^--[[:space:]]*//;
+                                    s#^--[[:space:]][[:space:]]*.*##;
+                                    s#[[:space:]][[:space:]]*--[[:space:]][[:space:]]*.*##;
+                                    s#^--*[[:alnum:]][[:alnum:]]*##;
+                                    s#[[:space:]][[:space:]]*--*[[:alnum:]][[:alnum:]]*##g
+                                    '
+                `
+    _Part1=`echo -- "$@" | sed  's/^--[[:space:]]*//;
+                                    s#^\(--[[:space:]][[:space:]]\)*.*#\1#;
+                                    s#\([[:space:]][[:space:]]*--[[:space:]][[:space:]]\)*.*#\1#
+                                    '
+              `
+    _Del_File=`echo -- "$@" | sed  's/^--[[:space:]]*//; 
+                                    s#'"$_Part1"'##g
+                                    '
+              `
+    _Del_File="$_Del_File1 ""$_Del_File"     
+
 else
-    ARGV=`echo -- "$@" | sed 's/^--[[:space:]]*//' |sed  's#[[:graph:]][[:graph:]]*--*[[:graph:]][[:graph:]]*##g'| sed  's#\(.*[[:space:]]*--*[[:alnum:]][[:alnum:]]*\).*#\1#g;s#^[^-]*$##g'`
+    ARGV=`echo -- "$@" | sed 's/^--[[:space:]]*//;
+                              s#[[:space:]]*[[:graph:]][[:graph:]]*--*[[:graph:]][[:graph:]]*##g;
+                              s#^[^-][^-]*##;
+                              s#[[:space:]][[:space:]]*[^-][^-]*##g
+                              '
+        `
+
+    _Del_File=`echo -- "$@" | sed 's/^--[[:space:]]*//;
+                                    s#^--*[[:alnum:]][[:alnum:]]*##;
+                                    s#[[:space:]][[:space:]]*--*[[:alnum:]][[:alnum:]]*##g
+                                    '
+                `
 fi
+
 
 
 if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -iqwE -- "-*h|--help|--he|--hel" ; then
@@ -199,29 +306,27 @@ if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -iqwE -- "-*h|--help|--he|
     exit 0
 fi
 
-if [ "x${ARGV}" = x ] ; then
-    _Del_File="$@"
-else
-    _Del_File=`echo -- "$@" | sed 's/^--[[:space:]]*//'| sed 's#[[:space:]]*'"$ARGV"'[[:space:]]*##' 2>/dev/null`
-fi
 
-
-_Real_Argv=`echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | sed 's#\([[:space:]]*-\)n\([[:alnum:]][[:alnum:]]*\)#\1\2#g; 
-                                s#[[:space:]]*-n\([[:space:]]*\)#\1#g;
-                                s#\([[:alnum:]]*\)n#\1#g;
-                                s#\([[:space:]]*-\)F\([[:alnum:]][[:alnum:]]*\)#\1\2#g;
-                                s#[[:space:]]*-F\([[:space:]]*\)#\1#g;
-                                s#\([[:alnum:]]*\)F#\1#g;
-                                s#\([[:space:]]*-\)N\([[:alnum:]][[:alnum:]]*\)#\1\2#g;
-                                s#[[:space:]]*-N\([[:space:]]*\)#\1#g;
-                                s#\([[:alnum:]]*\)N#\1#g
-                                '
-            `
 # Protect mounted partition
 for _File_check in $_Del_File ; do
     Get_FullPath "$_File_check"
-    if echo -- "$fullpath"| sed 's/--[[:space:]]*//' | grep -qE "${_Mount_RE}" 2>/dev/null ; then
-        printf "\033[1m$fullpath is preserved, if you really want to delete it, please perform:\033[0m\n    $realrm $fullpath\n"
+    Print_fullpath=$(echo -- "$fullpath" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
+    fullpath=$( echo -- $fullpath | sed 's/^--[[:space:]]*//;s#\\#\\\\#g;
+                                                            s#\*#\\*#g;
+                                                            s#\.#\\.#g;
+                                                            s#\?#\\?#g;
+                                                            s#\+#\\+#g;
+                                                            s#(#\\(#g;
+                                                            s#)#\\)#g;
+                                                            s#|#\\|#g;
+                                                            s#\[#\\[#g;
+                                                            s#\]#\\]#g;
+                                                            s#\^#\\^#g;
+                                                            s#\$#\\$#g
+                                        '
+            )
+    if echo -- "${Mount_List}" | sed 's/--[[:space:]]*//' | grep -qE "(^|[[:space:]][[:space:]]*)${fullpath}([[:space:]][[:space:]]*|$)" 2>/dev/null ; then
+        printf "\033[1m$Print_fullpath is preserved, if you really want to delete it, please perform:\033[0m\n    $realrm $Print_fullpath\n"
         # printf "OR:\n  \033[1m$0 -F\033[0m\n"
         exit 1
     fi
@@ -235,7 +340,7 @@ else
 fi
 
 if [ "x${_No_Print}" != "xyes" ] ; then
-    Print_File_List=`echo -- "$_Del_File" | sed 's/--[[:space:]]*//;s#%#%%#g'`
+    Print_File_List=$(echo -- "$_Del_File" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g;s#^[[:space:]]*##;s#[[:space:]]*$##;s#[[:space:]][[:space:]]*# #g')
 fi
 
 # Directly delete files
@@ -249,6 +354,7 @@ if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -q "F" 2>/dev/null ; then
 
     if echo "$reply" | grep -qiE "y|ye|yes" 2>/dev/null || [ "x${_No_Print}" = "xyes" ] ; then
         unset _Result
+        Get_Real_Argv
         $realrm $_Real_Argv $_Del_File && _Result=1
         if [ "x${_No_Print}" != "xyes" ] ; then
             if [ "x$_Result" = "x1" ] ; then
@@ -272,6 +378,7 @@ fi
 
 if echo "$reply" | grep -qiE "y|ye|yes" 2>/dev/null ; then
         unset _Result
+        Get_Real_Argv
         $realrm $_Real_Argv $_Del_File && _Result=1
         if [ "x${_No_Print}" != "xyes" ] ; then
             if [ "x$_Result" = "x1" ] ; then
@@ -286,10 +393,10 @@ else
     for file in $_Del_File
     do
         if [ "x${_No_Print}" != "xyes" ] ; then
-            Print_File=`echo -- "$file" | sed 's/--[[:space:]]*//;s#%#%%#g'`
+            Print_File=$(echo -- "$file" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
         fi
 
-        if ls --  $file >/dev/null 2>&1 && [ `du -s -- $file|awk '{print $1}'` -gt 8589934592 ]
+        if ls --  $file >/dev/null 2>&1 && [ `du -s -- $file|awk '{print $1}'` -gt 8388608 ]
         then
             if [ "x${_No_Print}" != "xyes" ] ; then
                 printf "\033[1m$Print_File is larger than 4G, deleted directly[YES/NO]:[NO]\033[0m"
@@ -299,6 +406,7 @@ else
             
             if echo "$reply" | grep -qiE "y|ye|yes" 2>/dev/null; then
                 unset _Result
+                Get_Real_Argv
                 $realrm $_Real_Argv $file && _Result=1
                 if [ "x${_No_Print}" != "xyes" ] ; then
                     if [ "x$_Result" = "x1" ] ; then
@@ -322,18 +430,18 @@ else
         # Get filename
         now=`date +"%Y-%m-%d %H:%M:%S"`
         # filename=${file##*/}
-        filename=`echo -- "$file" | sed 's/--[[:space:]]*//;s#.*/\([^/]*\)/$#\1#g;s#.*/\([^/]*\)$#\1#g'`
+        filename=`echo -- "$file" | sed 's/--[[:space:]]*//;s#/$##g;s#.*/\([^/]*\)$#\1#g'`
         newfilename="${filename}_$(date +"%Y-%m-%d_%H:%M:%S")"
 
         if [ "x${_No_Print}" != "xyes" ] ; then
-            Print_newfilename=`echo -- "$newfilename" | sed 's/--[[:space:]]*//;s#%#%%#g'`
+            Print_newfilename=$(echo -- "$newfilename" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
         fi
 
         # Get fullpath
         Get_FullPath "$file"
 
         if [ "x${_No_Print}" != "xyes" ] ; then
-            Print_fullpath=`echo -- "$fullpath" | sed 's/--[[:space:]]*//;s#%#%%#g'`
+            Print_fullpath=$(echo -- "$fullpath" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
         fi
 
         # Get fullpath of parent directory
@@ -431,7 +539,7 @@ else
         chmod +t   ${TMP_Dir1}/`date +"%Y%m%d"`/`id -un` 2>/dev/null
 
         if [ "x${_No_Print}" != "xyes" ] ; then
-            Print_Dest_Trash=`echo -- "$Dest_Trash" | sed 's/--[[:space:]]*//;s#%#%%#g'`
+            Print_Dest_Trash=$(echo -- "$Dest_Trash" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
         fi
 
         unset _Result
@@ -691,7 +799,7 @@ Get_Hist_List1()
 {
     local _OP=$1
     local _Log=$2
-    if [ -s ${_Log} ] ; then
+    if ! echo -- "$Hist_List" | sed 's/^--[[:space:]]*//' | grep -qF "$_Log" 2>/dev/null &&  [ -s ${_Log} ] ; then
         if [ "x`id -u`" = "x0" ] ; then
             Hist_List="$Hist_List ${_Log}"
         else
@@ -714,16 +822,22 @@ Get_Hist_List()
     local Home_Dir _Home_Dir _Log_Dir _Log
     unset Home_Dir _Home_Dir _Log_Dir _Log  Hist_List _No_List_Log
 
-    [ x"$User_List" = "x" ] && User_List=`id -un`
+    [ x"$User_List" = "x" ] && User_List="^`id -un`$"
     [ x"$User_List_Print" = "x" ] && User_List_Print=`id -un`
 
     # Get Hist_List
     Home_Dir=`awk -F: '$NF !~ /nologin$|false$/ {print $6}' /etc/passwd 2>/dev/null | sort -u | grep -vE "^$"`
     if [ "x$_Hist_List" = x ] ; then
-        for _Home_Dir in /etc $Home_Dir /tmp ; do
-            [ x"$_Home_Dir" = "x/" ] && _Home_Dir=""
-            for _Log_Dir in `ls -A -- ${_Home_Dir} 2>/dev/null | grep "\.trashlog[[:digit:]]*" 2>/dev/null ` ; do
-                for _Log in `ls -A -- ${_Home_Dir}/${_Log_Dir} 2>/dev/null` ; do
+        for _Home_Dir1 in /etc $Home_Dir /tmp ; do
+            [ ! -d $_Home_Dir1 ] && continue
+            if [ x"$_Home_Dir1" = "x/" ] ; then
+                 _Home_Dir=""
+            else
+                 _Home_Dir="$_Home_Dir1"
+            fi
+
+            for _Log_Dir in `ls -a -- ${_Home_Dir1} 2>/dev/null | grep -vE '^\.$|^\.\.$' | grep -E "^\.trashlog|^\.trashlog[[:digit:]]$" 2>/dev/null ` ; do
+                for _Log in `ls -a -- ${_Home_Dir}/${_Log_Dir} 2>/dev/null | grep -vE '^\.$|^\.\.$' ` ; do
                     if echo -- ${_Log} | sed 's/^--[[:space:]]*//' | grep -qE "$User_List" 2>/dev/null ; then
                         Get_Hist_List1 $_OP ${_Home_Dir}/${_Log_Dir}/${_Log}
                     fi
@@ -737,9 +851,9 @@ Get_Hist_List()
     fi
 
 
-    Hist_List=`echo "$Hist_List" | sed 's#^[[:space:]]*##g'`
-    _No_List_Log=`echo "$_No_List_Log" | sed 's#^[[:space:]]*##g'`
-    _No_List=`echo "$_No_List" | sed 's#^[[:space:]]*##g'`
+    Hist_List=`echo -- "$Hist_List" | sed 's/^--[[:space:]]*//;s#^[[:space:]]*##g'`
+    _No_List_Log=`echo -- "$_No_List_Log" | sed 's/^--[[:space:]]*//;s#^[[:space:]]*##g'`
+    _No_List=`echo -- "$_No_List" | sed 's/^--[[:space:]]*//;s#^[[:space:]]*##g'`
 
     if [ "x$_No_List" != x ] ; then
         [ "x${_No_Print}" != "xyes" ] && \
@@ -763,7 +877,7 @@ Get_Trashlog_Bak()
     local ParentDir=${Trashlog%/*}
     local Logname=${Trashlog##*/}
     local New_Name=$1
-    shift
+    [ $# -ne 0 ] && shift
     local All_Path="$@"
 
     Home_Dir=`awk -F: '$1=="'"${Logname}"'" {print $6}' /etc/passwd`
@@ -837,12 +951,12 @@ Write_Log()
 Delete_Parent_Dir()
 {
     local Filename=$1
-    if [ `ls -A -- ${Filename%/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
+    # if [ `ls -a -- ${Filename%/*} >/dev/null 2>&1 | grep -vE '^\.$|^\.\.$' | wc -l` -eq 0 ] ; then
         rmdir -- ${Filename%/*} 2>/dev/null
-    fi
-    if [ `ls -A -- ${Filename%/*/*} >/dev/null 2>&1 | wc -l` -eq 0 ] ; then
+    # fi
+    # if [ `ls -a -- ${Filename%/*/*} >/dev/null 2>&1 | grep -vE '^\.$|^\.\.$'| wc -l` -eq 0 ] ; then
         rmdir -- ${Filename%/*/*} 2>/dev/null
-    fi
+    # fi
 }
 
 if [ $# -eq 0 ] || ! echo  -- "$@" | sed 's/^--[[:space:]]*//' | grep -qE -- "-"
@@ -869,33 +983,32 @@ do
             _No_Print=yes
             ;;
         P)
-            Dst_path=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//' | sed 's#^.*-P[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#'`
+            Dst_path=`echo   -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#^.*-P[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#'`
             ;;
         p)
-            _Hist_List=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//' | sed 's#^.*-p[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#;s#,# #g'`
+            _Hist_List=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#^.*-p[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#;s#,# #g'`
             ;;
         u)
             # Get User_List
-
             if echo -- "$OPTARG" | sed 's/^--[[:space:]]*//' | grep -qE -- "all" 2>/dev/null ; then
                 if [ "x`id -u`" = "x0" ] ; then
                     User_List=.
                     User_List_Print="all users"
                 else
-                    User_List=`id -un`
+                    User_List="^`id -un`$"
                     User_List_Print=`id -un`
-                    # _No_List=`echo -- "$OPTARG"  | sed 's/^--[[:space:]]*//' | sed 's#'\`id -un\`'##g;s#,,*#,#g;s#^,##g;s#,$##g'`
+                    # _No_List=`echo -- "$OPTARG"  | sed 's/^--[[:space:]]*//;s#'\`id -un\`'##g;s#,,*#,#g;s#^,##g;s#,$##g'`
                     _No_List="all users"
                 fi
             else
                 if [ "x`id -u`" = "x0" ] ; then
-                    User_List=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//' | sed 's#,,*#|#g;s#|$##;s#^|##'`
-                    User_List_Print=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//' | sed 's#,,*#,#g;s#,$##;s#^,##'`
+                    User_List=`echo -- "$OPTARG"  | sed 's/^--[[:space:]]*//;s#,,*#|#g;s#|$##;s#^|##;s#^#\^#;s#$#\$#g'`
+                    User_List_Print=`echo -- "$OPTARG"  | sed 's/^--[[:space:]]*//;s#,,*#,#g;s#,$##;s#^,##'`
 
                 else
-                    User_List=`id -un`
+                    User_List="^`id -un`$"
                     User_List_Print=`id -un`
-                    _No_List=`echo -- "$OPTARG"  | sed 's/^--[[:space:]]*//' | sed 's#'\`id -un\`'##g;s#,,*#,#g;s#^,##g;s#,$##g'`
+                    _No_List=`echo -- "$OPTARG"   | sed 's/^--[[:space:]]*//;s#'\`id -un\`'##g;s#,,*#,#g;s#^,##g;s#,$##g'`
                 fi
             fi
             
@@ -929,7 +1042,7 @@ do
                     for _ID in $ID_List ; do
                         _Path=`awk 'NR == '"$_ID"' {print $NF}' $Hist_List 2>/dev/null`
                         if [ "x${_No_Print}" != "xyes" ] ; then
-                            _Print_Path=`echo -- "$_Path" | sed 's/--[[:space:]]*//;s#%#%%#g'`
+                            _Print_Path=$(echo -- "$_Path" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
                         fi
                         if [ `echo -- "$_Path" | sed 's/^--[[:space:]]*//' | wc -l` -eq  1 ] && ls -- "$_Path" >/dev/null 2>&1 ; then
                             if $realrm -rf -- "$_Path" >/dev/null 2>&1
@@ -984,12 +1097,13 @@ do
                         _Path=`awk 'NR == '"$_ID"' {print $NF}' $Hist_List 2>/dev/null`
                         _Spath=`awk 'NR == '"$_ID"' {print $(NF-1)}' $Hist_List 2>/dev/null`
                         _Sfile=${_Path##*/}
-
-                        [ "x${Dst_path}" != x ] && _Spath=${Dst_path}/`echo $_Sfile | sed 's#_[^_]*$##;s#_[^_]*$##'`
+                        # [ "x${Dst_path}" != x ] && _Spath=${Dst_path}/`echo -- $_Sfile | sed 's/--[[:space:]]*//;s#_[^_]*$##;s#_[^_]*$##'`
+                        [ "x${Dst_path}" != x ] && _Spath=${Dst_path}/`echo -- $_Sfile | sed 's/--[[:space:]]*//;s#_[[:digit:]]\{4\}-[[:digit:]]\{2\}-[[:digit:]]\{2\}_[[:digit:]]\{2\}:-[[:digit:]]\{2\}:-[[:digit:]]\{2\}$##'`
+                        _Spath=$(echo -- "$_Spath" | sed 's/--[[:space:]]*//;s#^//#/#')
 
                         if [ "x${_No_Print}" != "xyes" ] ; then
-                            _Print_Spath=`echo -- "$_Spath" | sed 's/--[[:space:]]*//;s#%#%%#g'`
-                            _Print_Path=`echo -- "$_Path" | sed 's/--[[:space:]]*//;s#%#%%#g'`
+                            _Print_Spath=$(echo -- "$_Spath" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
+                            _Print_Path=$(echo -- "$_Path" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
                         fi
 
                         
@@ -1055,13 +1169,12 @@ do
 
                 if echo $reply | grep -qiE "y|ye|yes" || [ "x${_No_Print}" = "xyes" ] ; then
                     
-                    _ID=0
+                    _ID=1
                     Line_Num=`awk 'END{print NR}'  $Hist_List 2>/dev/null`
                     while [ $_ID -le $Line_Num ] ; do
-                        _ID=`expr $_ID + 1`
                         _File=`awk 'NR == '"$_ID"' {print $NF}' $Hist_List 2>/dev/null`
                         if [ "x${_No_Print}" != "xyes" ] ; then
-                            _Print_File=`echo -- "$_File" | sed 's/--[[:space:]]*//;s#%#%%#g'`
+                            _Print_File=$(echo -- "$_File" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
                         fi
 
                        if [ `echo -- "$_File" | sed 's/^--[[:space:]]*//' | wc -l` -eq  1 ] && ls -- "$_File" >/dev/null 2>&1 ; then
@@ -1086,6 +1199,7 @@ do
                             [ "x${_No_Print}" != "xyes" ] && \
                             printf "Delete $_Print_File succeed\n"
                         fi
+                        _ID=`expr $_ID + 1`
                     done
                     Write_Log
                 fi
@@ -1145,7 +1259,7 @@ do
                                      else
                                         print $i
                                 }
-                            }' ${Trashlist_Header} ${Trashlist_One}  2>/dev/null | more
+                            }' ${Trashlist_Header} ${Trashlist_One}  2>/dev/null
 
                         [ -f ${Trashlist_One} ]   && $realrm -f -- ${Trashlist_One}   2>/dev/null
                         [ -f ${Trashlist_Header} ] && $realrm -f -- ${Trashlist_Header} 2>/dev/null
@@ -1281,7 +1395,7 @@ Get_Hist_List1()
 {
     local _OP=$1
     local _Log=$2
-    if [ -s ${_Log} ] ; then
+    if ! echo -- "$Hist_List" | sed 's/^--[[:space:]]*//' | grep -qF "$_Log" 2>/dev/null &&  [ -s ${_Log} ] ; then
         if [ "x`id -u`" = "x0" ] ; then
             Hist_List="$Hist_List ${_Log}"
         else
@@ -1307,7 +1421,7 @@ Get_Hist_List()
     unset Home_Dir _Home_Dir _Log_Dir _Log  Hist_List _No_List_Log
 
     if [ x"$_Recycle" = "xyes" ] ; then
-        [ x"$User_List" = "x" ] && User_List=`id -un`
+        [ x"$User_List" = "x" ] && User_List="^`id -un`$"
         [ x"$User_List_Print" = "x" ] && User_List_Print=`id -un`
     elif [ x"$_Find" = "xyes" ] ; then
         [ x"$User_List" = "x" ] && User_List="."
@@ -1317,10 +1431,16 @@ Get_Hist_List()
     # Get Hist_List
     Home_Dir=`awk -F: '$NF !~ /nologin$|false$/ {print $6}' /etc/passwd 2>/dev/null | sort -u | grep -vE "^$"`
     if [ "x$_Hist_List" = x ] ; then
-        for _Home_Dir in /etc $Home_Dir /tmp ; do
-            [ x"$_Home_Dir" = "x/" ] && _Home_Dir=""
-            for _Log_Dir in `ls -A -- ${_Home_Dir} 2>/dev/null | grep "\.trashlog[[:digit:]]*" 2>/dev/null ` ; do
-                for _Log in `ls -A -- ${_Home_Dir}/${_Log_Dir} 2>/dev/null` ; do
+        for _Home_Dir1 in /etc $Home_Dir /tmp ; do
+            [ ! -d $_Home_Dir1 ] && continue
+            if [ x"$_Home_Dir1" = "x/" ] ; then
+                 _Home_Dir=""
+            else
+                 _Home_Dir="$_Home_Dir1"
+            fi
+
+            for _Log_Dir in `ls -a -- ${_Home_Dir1} 2>/dev/null | grep -vE '^\.$|^\.\.$' | grep -E "^\.trashlog|^\.trashlog[[:digit:]]$" 2>/dev/null ` ; do
+                for _Log in `ls -a -- ${_Home_Dir}/${_Log_Dir} 2>/dev/null | grep -vE '^\.$|^\.\.$' ` ; do
                     if echo -- ${_Log} | sed 's/^--[[:space:]]*//' | grep -qE "$User_List" 2>/dev/null ; then
                         Get_Hist_List1 $_OP ${_Home_Dir}/${_Log_Dir}/${_Log}
                     fi
@@ -1333,9 +1453,9 @@ Get_Hist_List()
         done
     fi
 
-    Hist_List=`echo "$Hist_List" | sed 's#^[[:space:]]*##g'`
-    _No_List_Log=`echo "$_No_List_Log" | sed 's#^[[:space:]]*##g'`
-    _No_List=`echo "$_No_List" | sed 's#^[[:space:]]*##g'`
+    Hist_List=`echo -- "$Hist_List" | sed 's/--[[:space:]]*//;s#^[[:space:]]*##g'`
+    _No_List_Log=`echo -- "$_No_List_Log" | sed 's/--[[:space:]]*//;s#^[[:space:]]*##g'`
+    _No_List=`echo -- "$_No_List" | sed 's/--[[:space:]]*//;s#^[[:space:]]*##g'`
 
     if [ "x$_No_List" != x ] ; then
         [ "x${_No_Print}" != "xyes" ] && \
@@ -1376,33 +1496,32 @@ do
             _No_Print=yes
             ;;
         P)
-            _TrashDir=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//' | sed 's#^.*-P[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#'`
+            _TrashDir=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#^.*-P[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#'`
             ;;
         p)
-            _Hist_List=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//' | sed 's#^.*-p[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#;s#,# #g'`
+            _Hist_List=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#^.*-p[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#;s#,# #g'`
             ;;
         u)
             # Get User_List
-
             if echo -- "$OPTARG" | sed 's/^--[[:space:]]*//' | grep -qE -- "all" 2>/dev/null ; then
                 if [ "x`id -u`" = "x0" ] ; then
                     User_List=.
                     User_List_Print="all users"
                 else
-                    User_List=`id -un`
+                    User_List="^`id -un`$"
                     User_List_Print=`id -un`
-                    # _No_List=`echo -- "$OPTARG"  | sed 's/^--[[:space:]]*//' | sed 's#'\`id -un\`'##g;s#,,*#,#g;s#^,##g;s#,$##g'`
+                    # _No_List=`echo -- "$OPTARG"  | sed 's/^--[[:space:]]*//;s#'\`id -un\`'##g;s#,,*#,#g;s#^,##g;s#,$##g'`
                     _No_List="all users"
                 fi
             else
                 if [ "x`id -u`" = "x0" ] ; then
-                    User_List=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//' | sed 's#,,*#|#g;s#|$##;s#^|##'`
-                    User_List_Print=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//' | sed 's#,,*#,#g;s#,$##;s#^,##'`
+                    User_List=`echo -- "$OPTARG"  | sed 's/^--[[:space:]]*//;s#,,*#|#g;s#|$##;s#^|##;s#^#\^#;s#$#\$#g'`
+                    User_List_Print=`echo -- "$OPTARG"  | sed 's/^--[[:space:]]*//;s#,,*#,#g;s#,$##;s#^,##'`
 
                 else
-                    User_List=`id -un`
+                    User_List="^`id -un`$"
                     User_List_Print=`id -un`
-                    _No_List=`echo -- "$OPTARG"  | sed 's/^--[[:space:]]*//' | sed 's#'\`id -un\`'##g;s#,,*#,#g;s#^,##g;s#,$##g'`
+                    _No_List=`echo -- "$OPTARG"   | sed 's/^--[[:space:]]*//;s#'\`id -un\`'##g;s#,,*#,#g;s#^,##g;s#,$##g'`
                 fi
             fi
             
@@ -1466,12 +1585,12 @@ do
 
                     
                     for _Trash_Dir in $TrashDir  ;do
-                        for  _Date_Dir in `ls -A -- $_Trash_Dir 2>/dev/null | grep -v "[^[[:digit:]]" ` ; do
-                            for _User_Dir in `ls  -A -- ${_Trash_Dir}/${_Date_Dir} 2>/dev/null | grep -E "$User_List" 2>/dev/null` ; do
+                        for  _Date_Dir in `ls -al -- $_Trash_Dir 2>/dev/null | awk '$0 ~ /^d/ && $NF ~ /^[[:digit:]]*$/ {print $NF}' 2>/dev/null ` ; do
+                            for _User_Dir in `ls  -Al -- ${_Trash_Dir}/${_Date_Dir} 2>/dev/null | awk '$0 ~ /^d/ && $NF ~ /'"$User_List"'/ {print $NF}' 2>/dev/null` ; do
                                 for _File in `ls  -A -- ${_Trash_Dir}/${_Date_Dir}/${_User_Dir} 2>/dev/null` ; do
                                     if ! grep -qFw "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" $Hist_List 2>/dev/null ; then
                                         if [ "x${_No_Print}" != "xyes" ] ; then
-                                            Print_filename=`echo -- "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" | sed 's/--[[:space:]]*//;s#%#%%#g'`
+                                            Print_filename=$(echo -- "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
                                             printf "Find $Print_filename"
                                         fi
                                         $trashlog_bin "$_No_Print" "Write_Trash_Log" "Re_Sure_" "unknow" "unknow" `date +%Y-%m-%d` `date +%H:%M:%S` `date +%s` "${_File}" "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}"
@@ -1555,6 +1674,8 @@ if [ "x$_Install_Alias" = "xyes" ] ; then
     _Profile_List="${_Profile_List} `find $Find_Dir -type f  -name ".shrc" 2>/dev/null`"
     _Profile_List_Csh=`find $Find_Dir -type f  -name ".*cshrc" 2>/dev/null`
     for _sh_file in $_Profile_List $_Profile_List_Csh $Profile_List; do
+        Get_Trashlog_Bak $_sh_file
+        [ ! -w $_sh_file -o "x$Trashlog_Bak" = "x" ] && continue
         sed  '/^[[:space:]]*alias[[:space:]]*_rm[[:space:]=]*/d;
               /^[[:space:]]*alias[[:space:]]*rm[[:space:]=]*/d;
               /^[[:space:]]*alias[[:space:]]*rF[[:space:]=]*/d;
@@ -1562,9 +1683,15 @@ if [ "x$_Install_Alias" = "xyes" ] ; then
               /^[[:space:]]*alias[[:space:]]*rla[[:space:]=]*/d;
               /^[[:space:]]*alias[[:space:]]*rd[[:space:]=]*/d;
               /^[[:space:]]*alias[[:space:]]*rr[[:space:]=]*/d;
-             ' $_sh_file > /tmp/${_sh_file##*/}
-        if echo $_sh_file | grep -q "cshrc" ; then
-            cat >> /tmp/${_sh_file##*/} <<- eof
+             ' $_sh_file > $Trashlog_Bak
+        if echo -- $_sh_file | sed 's/--[[:space:]]*//' | grep -q "cshrc" ; then
+            Csh_Path="set path = ($Install_Path /bin /sbin /usr/bin /usr/sbin /usr/local/bin /usr/local/sbin \$path)"
+            if ! grep -qF "$Csh_Path" $Trashlog_Bak 2>/dev/null ; then
+                cat >> $Trashlog_Bak <<- eof
+            $Csh_Path
+eof
+            fi
+            cat >> $Trashlog_Bak <<- eof
             alias rm   "$delete_name -n"
             alias rl   'unrm -l'
             alias rla  'unrm -l -u all'
@@ -1573,7 +1700,13 @@ if [ "x$_Install_Alias" = "xyes" ] ; then
 eof
 
         else
-            cat >> /tmp/${_sh_file##*/} <<- eof
+            if ! grep -qF "$Def_Path" $Trashlog_Bak 2>/dev/null ; then
+                cat >> $Trashlog_Bak <<- eof
+            $Def_Path
+eof
+            fi
+
+            cat >> $Trashlog_Bak <<- eof
             alias rm="$delete_name -n"
             alias rl='unrm -l'
             alias rla='unrm -l -u all'
@@ -1581,14 +1714,15 @@ eof
             alias rr='unrm -r'
 eof
         fi
-        mv -f -- /tmp/${_sh_file##*/} $_sh_file 2>/dev/null
-        [ -f /tmp/${_sh_file##*/} ] && $realrm -f /tmp/${_sh_file##*/} 2>/dev/null
+        mv -f -- $Trashlog_Bak $_sh_file 2>/dev/null
+        [ -f $Trashlog_Bak ] && $realrm -f $Trashlog_Bak 2>/dev/null
     done
 
 else
     if [ "x$_No_Print" != "xyes" ] ; then
-    printf "\n\033[1m# Add following lines in your shell profile!\033[0m\n"
+    printf "\n\033[1m# Add following lines in your shell profile\033[0m\n"
     cat <<- eof
+    $Def_Path
     alias rm="$delete_name -n"
     alias rl='unrm -l'
     alias rla='unrm -l -u all'
