@@ -263,7 +263,7 @@ if echo -- "$@" | sed 's/^--[[:space:]]*//' | grep -qE -- "[[:space:]]*--[[:spac
                               s#\([[:space:]][[:space:]]*--\)[[:space:]][[:space:]]*.*#\1#;
                               s#[[:space:]]*[[:graph:]][[:graph:]]*--*[[:graph:]][[:graph:]]*##g;
                               s#^[^-][^-]*##;
-                              s#[[:space:]][[:space:]]*[^-][^-]*##g
+                              s#[[:space:]][[:space:]]*[^-][^-]*# #g
                               '
         `
     _Del_File1=`echo -- "$@" | sed 's/^--[[:space:]]*//;
@@ -288,7 +288,7 @@ else
     ARGV=`echo -- "$@" | sed 's/^--[[:space:]]*//;
                               s#[[:space:]]*[[:graph:]][[:graph:]]*--*[[:graph:]][[:graph:]]*##g;
                               s#^[^-][^-]*##;
-                              s#[[:space:]][[:space:]]*[^-][^-]*##g
+                              s#[[:space:]][[:space:]]*[^-][^-]*# #g
                               '
         `
 
