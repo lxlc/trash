@@ -1679,7 +1679,21 @@ do
                         for  _Date_Dir in `ls -al -- $_Trash_Dir 2>/dev/null | awk '$0 ~ /^d/ && $NF ~ /^[[:digit:]]*$/ {print $NF}' 2>/dev/null ` ; do
                             for _User_Dir in `ls -al -- ${_Trash_Dir}/${_Date_Dir} 2>/dev/null | awk '$0 ~ /^d/ && $NF !~ /^\.$|^\.\.$/ && $NF ~ /'"$User_List"'/ {print $NF}' 2>/dev/null` ; do
                                 for _File in `ls -a -- ${_Trash_Dir}/${_Date_Dir}/${_User_Dir} | grep -vE '^\.$|^\.\.$' 2>/dev/null` ; do
-                                    if ! grep -qFw "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" $Hist_List 2>/dev/null ; then
+                                    _Find_Name=$( echo -- ${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File} | sed 's/^--[[:space:]]*//;s#\\#\\\\#g;
+                                                                                                                                      s#\*#\\*#g;
+                                                                                                                                      s#\.#\\.#g;
+                                                                                                                                      s#\?#\\?#g;
+                                                                                                                                      s#\+#\\+#g;
+                                                                                                                                      s#(#\\(#g;
+                                                                                                                                      s#)#\\)#g;
+                                                                                                                                      s#|#\\|#g;
+                                                                                                                                      s#\[#\\[#g;
+                                                                                                                                      s#\]#\\]#g;
+                                                                                                                                      s#\^#\\^#g;
+                                                                                                                                      s#\$#\\$#g
+                                                                                                                '
+                                            )
+                                    if ! grep -qE "[[:space:]][[:space:]]*${_Find_Name}[[:space:]]*$" $Hist_List 2>/dev/null ; then
                                         if [ "x${_No_Print}" != "xyes" ] ; then
                                             Print_filename=$(echo -- "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
                                             printf "Find $Print_filename"
