@@ -20,12 +20,13 @@
         sh trash.sh -b /bin/
         sh trash.sh -n -d 30   设置回收站文件过期天数
         sh trash.sh -n -f      初始化回收站、日志文件夹(需root权限)
-        sh trash.sh -n -i      在shell配置文件中安装alias， -P 指定查找配置文件的位置
+        sh trash.sh -n -a      在shell配置文件中安装alias， -P 指定查找配置文件的位置
 
 
 已知问题：
     待删文件名中不能包含空白符 [[:space:]]*
     待删文件名中不能包含  (unix限制)
+    系统负载较高时，执行速度略慢
 
 注意：
 
@@ -265,11 +266,11 @@ ID User   Date       Time     SourcePath               TrashPath
 [root@localhost tmp]# ls /
 ~`!@#$%^&*()_-+={[}]|\:;'",<.>?
 
-root@vm-upayapp:/ # rm ~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\? 
+[root@localhost tmp]# rm ~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\? 
 /~`!@#$%^&*()_-+={[}]|\:;'",<.>? is preserved, if you really want to delete it, please perform:
     /usr/bin/rm /~`!@#$%^&*()_-+={[}]|\:;'",<.>?
 
-root@vm-upayapp:/ # mv /~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\?  /tmp
+[root@localhost tmp]# mv /~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\?  /tmp
 
 [root@localhost tmp]# rm \~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\? 
 
