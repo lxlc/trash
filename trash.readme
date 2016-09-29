@@ -10,7 +10,8 @@
     7、保护挂载分区、/ 分区下所有文件、/tmp不被删除,如:
            / /boot /bin /sbin /lib /lib64 /usr /var /home /opt /etc /sys
            /proc /dev /net /root /tmp /cgroup /selinux /mnt /media
-    8、在HPUX、AIX、Linux、freebsd中经过测试
+    8、替换系统rm,将原rm命令备份
+    9、在HPUX、AIX、Linux、freebsd中测试通过
 
 脚本部署
     帮助
@@ -21,35 +22,38 @@
         sh trash.sh -b /bin/
         sh trash.sh -n -d 30   设置回收站文件过期天数
         sh trash.sh -n -f      初始化回收站、日志文件夹(需root权限)
-        sh trash.sh -n -a      在shell配置文件中安装alias， -P 指定查找配置文件的位置
+        sh trash.sh -n -a      在shell配置文件中安装alias, -P 指定查找配置文件的位置
 
 
 已知问题：
-    待删文件名中不能包含空白符 [[:space:]]*
-    待删文件名中不能包含  (unix限制)
-    系统负载较高时，执行速度略慢
+    所指定的待回收文件、日志文件、回收站文件,其文件名中不能包含"/" (unix限制)
+    待回收文件的文件名中不能包含空白符 [[:space:]]*
+    unrm cleantrash 通过-p 指定的日志列表中,文件名不能包含","
+    trash.sh cleantrash  通过-P 指定的文件列表中,文件名不能包含","
+    系统负载较高时,执行速度略慢
 
 注意：
 
-    * 空白符作为文件名分隔符，含空白符的文件将被视为多个文件，用系统自带的"rm"删除此类文件
+    * 空白符作为文件名分隔符,含空白符的文件将被视为多个文件,用系统自带的"rm"删除此类文件
 
     * 文件名中的特殊字符需要转义
         \~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\?
-    * 为提高执行效率，最好初始化日志目录和回收站目录
+
+    * 为提高执行效率,建议初始化日志目录和回收站目录
         sh trash.sh -f
 
     1、需修改/tmp目录权限
         chmod 777 /tmp
         chmod +t /tmp
 
-    2、日志文件按优先顺序存放(正则表示),如果以下目录均不可写，则记日志失败
+    2、日志文件按优先顺序存放(正则表示),如果以下目录均不可写,则记日志失败
         1、/etc/.trashlog[1-9]
         2、$HOME/.trashlog[1-9]
         3、/tmp/.trashlog[1-9]
         4、/tmp
 
-    3、回收站目录优先顺序(正则表示),如果以下目录均不可写，则记文件回收失败
-        1、回收文件对应的挂载点的根目录,/tmp，如:
+    3、回收站目录优先顺序(正则表示),如果以下目录均不可写,则记文件回收失败
+        1、回收文件对应的挂载点的根目录,/tmp,如:
             # df -P
             Filesystem      512-blocks    Used    Avail Capacity  Mounted on
             /dev/gpt/rootfs   40614392 2705832 34659416     7%    /
@@ -61,15 +65,15 @@
             /dev/testfile      /dev/.trash/20160925/root
             /tmp/testfile      /tmp/.trash/20160925/root
 
-        3、如果1中的回收站无法访问，则回收站设置为回收文件父目录
+        3、如果1中的回收站无法访问,则回收站设置为回收文件父目录
             ${file%/*}/.trash[1-9]/`date "+%Y%m%d"`/`id -un`
 
 部署后文件:
-    trash.sh            原始脚本文件，执行此文件安装即可
+    trash.sh            原始脚本文件,执行此文件安装即可
     delete              文件删除
-    trashlog            记录日志，由delete,cleantrash调用
+    trashlog            记录日志,由delete,cleantrash调用
     unrm                列表,恢复,删除,清空回收站
-    cleantrash          定时清理过期文件，查找已被回收,但未记录在日志中的文件
+    cleantrash          定时清理过期文件,查找已被回收,但未记录在日志中的文件
 
 
 帮助：
@@ -86,6 +90,7 @@ trash.sh -h
         -n                 No prompt
         -p  path           Specify install path, default /bin
         -P  pathlist       Write alias to Shell Config files find in pathlist, default all
+        -y                 Replace system rm
 #################################################################################################################
 
 #################################################################################################################
@@ -116,7 +121,6 @@ delete -h
     SEE ALSO: "/bin/rm --help"
 #################################################################################################################
 
-
 #################################################################################################################
 unrm -h
 
@@ -136,7 +140,7 @@ unrm -h
         -h                 Display this help and exit
         -l                 List trash history
         -n                 Never prompt
-        -p pathlist        Specify trash history file list
+        -p pathlist        Specify trash history file list, seperated by ","
         -P path            Recover destpath, only use with -r
         -r idlist          Recover the files associated with the idlist, seperated by ","
         -u userlist        Specify user to filter the history, seperated by ","                  
@@ -157,8 +161,8 @@ cleantrash -h
         -d hold_Day        Specify expiration days of deleted files, only use with -r
         -h                 Display this help and exit
         -n                 Never prompt
-        -p pathlist        Specify trash history file list
-        -P pathlist        Specify trash directory, only use with -R
+        -p pathlist        Specify trash history file list, seperated by ","
+        -P pathlist        Specify trash directory, only use with -R, seperated by ","
         -r                 Delete expired files
         -R                 Find deleted files not marked in logfiles
         -u userlist        Specify user to filter the history, seperated by ","                  
@@ -169,17 +173,16 @@ cleantrash -h
 
 示例：
 #################################################################################################################
+
 # ALIAS
 [root@localhost root]#alias
-_rm=/bin/rm
-rF='delete -F'
-rd='unrm -d'
+rm='delete -n'
 rl='unrm -l'
 rla='unrm -l -u all'
-rm='delete -n'
+rd='unrm -d'
 rr='unrm -r'
-
 #################################################################################################################
+
 # 回收
 [root@localhost root]#pwd
 /root/a
@@ -207,6 +210,7 @@ ID User Date       Time     SourcePath TrashPath
 7  root 2016-09-24 13:28:42 /root/a/a  /.trash/20160924/root
 8  root 2016-09-24 13:28:42 /root/a/1  /.trash/20160924/root
 #################################################################################################################
+
 # 还原
 [root@localhost root]#mkdir /tmp/test
 [root@localhost root]#rr  1 -P /tmp/test -n 
@@ -232,6 +236,7 @@ ID User Date       Time     SourcePath TrashPath
 [root@localhost root]#ls /tmp/test
 6   7   c
 #################################################################################################################
+
 # 删除,清空回收站
 [root@localhost root]#rd -1,2-3,5,6- -n -u all
 [root@localhost root]#rla
@@ -243,6 +248,7 @@ ID User Date       Time     SourcePath TrashPath
 #################################################################################################################
 
 #################################################################################################################
+
 # 查找已被回收,但未记录在日志中的文件
 [root@localhost root]#rl -fuall
 [root@localhost root]#cleantrash -R
@@ -263,6 +269,7 @@ ID User   Date       Time     SourcePath               TrashPath
 #################################################################################################################
 
 #################################################################################################################
+
 # 特殊字符支持
 [root@localhost tmp]# ls /
 ~`!@#$%^&*()_-+={[}]|\:;'",<.>?

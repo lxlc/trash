@@ -20,6 +20,7 @@ USAGE() {
     -n                 No prompt
     -p  path           Specify install path, default /bin
     -P  pathlist       Write alias to Shell Config files find in pathlist, default all
+    -y                 Replace system rm
                         
 eof
 }
@@ -64,7 +65,7 @@ Get_Trashlog_Bak()
     done
 }
 
-while getopts "ad:fhnp:P:" Option
+while getopts "ad:fhnp:P:y" Option
 do
     case "$Option" in
         a)
@@ -90,6 +91,9 @@ do
             ;;
         P)
             Shell_Config_Find_Path=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#,,*# #g'`
+            ;;
+        y)
+            Replace_system_rm=yes
             ;;
 
         \?)
@@ -134,6 +138,83 @@ Root_Name=` awk -F: '$3 == 0 {print $1}' /etc/passwd | head -1`
 Root_Gid=`  awk -F: '$3 == 0 {print $4}' /etc/passwd | head -1`
 Root_Group=`awk -F: '$3 == '"$Root_Gid"' {print $1}' /etc/group | head -1`
 delete_name=delete
+
+
+if file "$realrm" 2>/dev/null | grep -qi "text" 2>/dev/null && grep -qi "#Repleace_Mark" "$realrm" 2>/dev/null ; then
+    _realrm=`awk -F'=' '$0 ~ /^#realrm/ {print $2}' "$realrm" 2>/dev/null | head -1`
+    if [ "x$_realrm" != "x" ] ; then
+        Old_realrm=$realrm
+        realrm=$_realrm
+    else
+        if [ "x$_No_Print" != "xyes" ] ; then
+            printf "\033[1mNot find system rm, install failed, exit\n\033[0m"
+        fi
+        exit 1
+    fi
+fi
+
+
+# Replace system rm
+ 
+if [ "x$Replace_system_rm" = "xyes" ] ; then
+    if [ "x`id -u`" = "x0" ] ; then
+        if [ "x$Old_realrm" != "x" ] &&  file "$Old_realrm" 2>/dev/null | grep -qi "text" 2>/dev/null && grep -qi "#Repleace_Mark" "$Old_realrm" 2>/dev/null ; then
+            cat > $Old_realrm 2>/dev/null <<- eof
+#Repleace_Mark
+#realrm=$realrm
+${Install_Path}/${delete_name} -N \$@
+eof
+            if [ $? -ne 0 ] ; then
+                cp -p -- "$realrm" $Old_realrm 2>/dev/null
+                realrm=$Old_realrm
+                if [ "x$_No_Print" != "xyes" ] ; then
+                    printf "\033[1mReplace system rm failed\n\n\033[0m"
+                fi
+            fi
+        else
+            Get_Trashlog_Bak "$realrm" "rmbak" "${realrm%/*}"
+            if [ "x$Trashlog_Bak" != "x" ] ; then
+                Rm_Priv_User=`ls -l $realrm  | awk '{ print substr($1,2,3) }'`
+                Rm_Priv_Group=`ls -l $realrm | awk '{ print substr($1,5,3) }'`
+                Rm_Priv_Other=`ls -l $realrm | awk '{ print substr($1,8,3) }'`
+                Rm_User=`ls -l $realrm | awk '{ print $3 }'`
+                Rm_Group=`ls -l $realrm  | awk '{ print $4 }'`
+                
+                if mv -- "$realrm" $Trashlog_Bak 2>/dev/null ; then
+                    unset _result
+                    cat > $realrm 2>/dev/null <<- eof
+#Repleace_Mark
+#realrm=$Trashlog_Bak
+${Install_Path}/${delete_name} -N \$@
+eof
+                    [ $? -ne 0 ] && _result=0
+                    chmod u=${Rm_Priv_User},g=${Rm_Priv_Group},o=${Rm_Priv_Other} $realrm 2>/dev/null || _result=0
+                    chown ${Rm_User}:${Rm_Group} $realrm 2>/dev/null || _result=0
+                    if [ "x$_result" = "x0" ] ; then
+                        mv -- $Trashlog_Bak "$realrm"  2>/dev/null
+                        if [ "x$_No_Print" != "xyes" ] ; then
+                            printf "\033[1mReplace system rm failed: backup $realrm to $Trashlog_Bak\n\n\033[0m"
+                        fi
+                    else
+                        realrm="$Trashlog_Bak"
+                    fi
+                else
+                    if [ "x$_No_Print" != "xyes" ] ; then
+                        printf "\033[1mReplace system rm failed: backup $realrm to $Trashlog_Bak\n\n\033[0m"
+                    fi
+                fi
+            else
+                if [ "x$_No_Print" != "xyes" ] ; then
+                    printf "\033[1mReplace system rm failed: backup $realrm to $Trashlog_Bak\n\n\033[0m"
+                fi
+            fi
+        fi
+    else
+        if [ "x$_No_Print" != "xyes" ] ; then
+            printf "\033[1mYou have no permission to replace system rm: $realrm\n\n\033[0m"
+        fi
+    fi
+fi
 
 
 [ -e ${Install_Path}/${delete_name} ] && $realrm -rf ${Install_Path}/${delete_name} 2>/dev/null
@@ -306,11 +387,20 @@ if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -iqwE -- "-*h|--help|--he|
     exit 0
 fi
 
+unset _No_Print
+if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -qE -- "n|N" 2>/dev/null; then
+    _No_Print=yes
+else
+    _No_Print=no
+fi
+
 
 # Protect mounted partition
 for _File_check in $_Del_File ; do
     Get_FullPath "$_File_check"
-    Print_fullpath=$(echo -- "$fullpath" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
+    # [ "x${_No_Print}" != "xyes" ] && \
+        Print_fullpath=$(echo -- "$fullpath" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
+
     fullpath=$( echo -- $fullpath | sed 's/^--[[:space:]]*//;s#\\#\\\\#g;
                                                             s#\*#\\*#g;
                                                             s#\.#\\.#g;
@@ -326,18 +416,14 @@ for _File_check in $_Del_File ; do
                                         '
             )
     if echo -- "${Mount_List}" | sed 's/--[[:space:]]*//' | grep -qE "(^|[[:space:]][[:space:]]*)${fullpath}([[:space:]][[:space:]]*|$)" 2>/dev/null ; then
+        # [ "x${_No_Print}" != "xyes" ] && \
         printf "\033[1m$Print_fullpath is preserved, if you really want to delete it, please perform:\033[0m\n    $realrm $Print_fullpath\n"
         # printf "OR:\n  \033[1m$0 -F\033[0m\n"
         exit 1
     fi
 done
 
-unset _No_Print
-if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -qE -- "n|N" 2>/dev/null; then
-    _No_Print=yes
-else
-    _No_Print=no
-fi
+
 
 if [ "x${_No_Print}" != "xyes" ] ; then
     Print_File_List=$(echo -- "$_Del_File" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g;s#^[[:space:]]*##;s#[[:space:]]*$##;s#[[:space:]][[:space:]]*# #g')
@@ -355,7 +441,7 @@ if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -q "F" 2>/dev/null ; then
     if echo "$reply" | grep -qiE "y|ye|yes" 2>/dev/null || [ "x${_No_Print}" = "xyes" ] ; then
         unset _Result
         Get_Real_Argv
-        $realrm $_Real_Argv $_Del_File && _Result=1
+        $realrm $_Real_Argv $_Del_File  && _Result=1
         if [ "x${_No_Print}" != "xyes" ] ; then
             if [ "x$_Result" = "x1" ] ; then
                  printf "Delete $Print_File_List directly succeed\n"
@@ -753,7 +839,7 @@ USAGE() {
     -h                 Display this help and exit
     -l                 List trash history
     -n                 Never prompt
-    -p pathlist        Specify trash history file list
+    -p pathlist        Specify trash history file list, seperated by ","
     -P path            Recover destpath, only use with -r
     -r idlist          Recover the files associated with the idlist, seperated by ","
     -u userlist        Specify user to filter the history, seperated by ","                  
@@ -983,10 +1069,11 @@ do
             _No_Print=yes
             ;;
         P)
-            Dst_path=`echo   -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#^.*-P[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#'`
+            # Dst_path=`echo   -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#^,*\([^,][^,]*\),,*.*#\1#'`
+            Dst_path="$OPTARG"
             ;;
         p)
-            _Hist_List=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#^.*-p[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#;s#,# #g'`
+            _Hist_List=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#,,*# #g;s#[[:space:]]*$##;s#^[[:space:]]*##'`
             ;;
         u)
             # Get User_List
@@ -1098,7 +1185,7 @@ do
                         _Spath=`awk 'NR == '"$_ID"' {print $(NF-1)}' $Hist_List 2>/dev/null`
                         _Sfile=${_Path##*/}
                         # [ "x${Dst_path}" != x ] && _Spath=${Dst_path}/`echo -- $_Sfile | sed 's/--[[:space:]]*//;s#_[^_]*$##;s#_[^_]*$##'`
-                        [ "x${Dst_path}" != x ] && _Spath=${Dst_path}/`echo -- $_Sfile | sed 's/--[[:space:]]*//;s#_[[:digit:]]\{4\}-[[:digit:]]\{2\}-[[:digit:]]\{2\}_[[:digit:]]\{2\}:-[[:digit:]]\{2\}:-[[:digit:]]\{2\}$##'`
+                        [ "x${Dst_path}" != x ] && _Spath=${Dst_path%/}/`echo -- $_Sfile | sed 's/--[[:space:]]*//;s#_[[:digit:]]\{4\}-[[:digit:]]\{2\}-[[:digit:]]\{2\}_[[:digit:]]\{2\}:[[:digit:]]\{2\}:[[:digit:]]\{2\}$##'`
                         _Spath=$(echo -- "$_Spath" | sed 's/--[[:space:]]*//;s#^//#/#')
 
                         if [ "x${_No_Print}" != "xyes" ] ; then
@@ -1178,7 +1265,7 @@ do
                         fi
 
                        if [ `echo -- "$_File" | sed 's/^--[[:space:]]*//' | wc -l` -eq  1 ] && ls -- "$_File" >/dev/null 2>&1 ; then
-                            if $realrm -fr -- "$_File" ; then
+                            if $realrm -fr -- "$_File" >/dev/null 2>&1 ; then
                             
                                 Delete_Parent_Dir "$_File"
 
@@ -1378,8 +1465,8 @@ USAGE() {
     -d hold_Day        Specify expiration days of deleted files, only use with -r
     -h                 Display this help and exit
     -n                 Never prompt
-    -p pathlist        Specify trash history file list
-    -P pathlist        Specify trash directory, only use with -R
+    -p pathlist        Specify trash history file list, seperated by ","
+    -P pathlist        Specify trash directory, only use with -R, seperated by ","
     -r                 Delete expired files
     -R                 Find deleted files not marked in logfiles
     -u userlist        Specify user to filter the history, seperated by ","                  
@@ -1496,11 +1583,13 @@ do
             _No_Print=yes
             ;;
         P)
-            _TrashDir=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#^.*-P[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#'`
+            # _TrashDir=`echo   -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#^,*\([^,][^,]*\),,*.*#\1#'`
+            _TrashDir="$OPTARG"
             ;;
         p)
-            _Hist_List=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#^.*-p[[:space:]]*\([[:graph:],][[:graph:],]*\).*#\1#;s#,# #g'`
+            _Hist_List=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#,,*# #g;s#[[:space:]]*$##;s#^[[:space:]]*##'`
             ;;
+
         u)
             # Get User_List
             if echo -- "$OPTARG" | sed 's/^--[[:space:]]*//' | grep -qE -- "all" 2>/dev/null ; then
@@ -1545,12 +1634,13 @@ do
                     _ID_List=`awk '{ "date +%s"|getline N; if ((N-$4)/86400 >= '"$Expire_Day"') printf NR"," } 
                                    END{printf "\n"}'  $Hist_List  2>/dev/null
                              `
+                    Hist_List=`echo -- "$Hist_List" | sed 's/^--[[:space:]]*//;s#[[:space:]]*$##;s#[[:space:]][[:space:]]*#,#g'`
                     if [ "x${_ID_List}" != x ] ; then
-                        if [ "x${_No_Print}" != "xyes" ] ; then
-                            $unrm_bin -nd -u $_ID_List $Hist_List >/dev/null 2>&1
-                        else
-                            $unrm_bin -d -u $_ID_List $Hist_List >/dev/null 2>&1
-                        fi
+                        # if [ "x${_No_Print}" != "xyes" ] ; then
+                        #     $unrm_bin -d   $_ID_List -p $Hist_List >/dev/null 2>&1
+                        # else
+                            $unrm_bin -nd  $_ID_List -p $Hist_List >/dev/null 2>&1
+                        # fi
                     fi
                 fi
             }
@@ -1586,8 +1676,8 @@ do
                     
                     for _Trash_Dir in $TrashDir  ;do
                         for  _Date_Dir in `ls -al -- $_Trash_Dir 2>/dev/null | awk '$0 ~ /^d/ && $NF ~ /^[[:digit:]]*$/ {print $NF}' 2>/dev/null ` ; do
-                            for _User_Dir in `ls  -Al -- ${_Trash_Dir}/${_Date_Dir} 2>/dev/null | awk '$0 ~ /^d/ && $NF ~ /'"$User_List"'/ {print $NF}' 2>/dev/null` ; do
-                                for _File in `ls  -A -- ${_Trash_Dir}/${_Date_Dir}/${_User_Dir} 2>/dev/null` ; do
+                            for _User_Dir in `ls -al -- ${_Trash_Dir}/${_Date_Dir} 2>/dev/null | awk '$0 ~ /^d/ && $NF ~ /'"$User_List"'/ {print $NF}' 2>/dev/null` ; do
+                                for _File in `ls -a -- ${_Trash_Dir}/${_Date_Dir}/${_User_Dir} | grep -vE '^\.$|^\.\.$' 2>/dev/null` ; do
                                     if ! grep -qFw "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" $Hist_List 2>/dev/null ; then
                                         if [ "x${_No_Print}" != "xyes" ] ; then
                                             Print_filename=$(echo -- "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
@@ -1626,7 +1716,7 @@ if [ "x$_Help" = "xyes" ] && [ "x$Expire_Day" != "x" -o "x$_No_Print" = "xyes" -
     exit 1
 fi
 
-[ "x$_No_Print" != "xyes" ] && _No_Print=no
+# [ "x$_No_Print" != "xyes" ] && _No_Print=no
 
 if [ "x$_Recycle" = "xyes" ] ; then
     unset  Hist_List
@@ -1650,10 +1740,7 @@ chmod 555 ${Install_Path}/cleantrash 2>/dev/null
 chown ${Root_Name}:${Root_Group} ${Install_Path}/cleantrash 2>/dev/null
 
 
-
-
-
-#alias
+# alias
 if [ "x$_Install_Alias" = "xyes" ] ; then
 
     # User_Home=`awk -F: '$NF ~ /.*sh$/ {print $6}' /etc/passwd|sort -u|grep -vE "^/$|^$"`
