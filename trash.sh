@@ -121,6 +121,8 @@ else
     fi
 fi
 
+Install_Path=${Install_Path%/}
+
 # Set Expire_Day
 [ "x${Expire_Day1}" = x ] && Expire_Day=30
 if [ "x$_No_Print" != "xyes" ] ; then
@@ -1276,7 +1278,6 @@ do
                             else
                                 [ "x${_No_Print}" != "xyes" ] && \
                                 printf "\033[1mDelete $_Print_File failed\033[0m\n"
-                                continue
                             fi
                         else
                             Delete_Parent_Dir "$_File"
@@ -1676,7 +1677,7 @@ do
                     
                     for _Trash_Dir in $TrashDir  ;do
                         for  _Date_Dir in `ls -al -- $_Trash_Dir 2>/dev/null | awk '$0 ~ /^d/ && $NF ~ /^[[:digit:]]*$/ {print $NF}' 2>/dev/null ` ; do
-                            for _User_Dir in `ls -al -- ${_Trash_Dir}/${_Date_Dir} 2>/dev/null | awk '$0 ~ /^d/ && $NF ~ /'"$User_List"'/ {print $NF}' 2>/dev/null` ; do
+                            for _User_Dir in `ls -al -- ${_Trash_Dir}/${_Date_Dir} 2>/dev/null | awk '$0 ~ /^d/ && $NF !~ /^\.$|^\.\.$/ && $NF ~ /'"$User_List"'/ {print $NF}' 2>/dev/null` ; do
                                 for _File in `ls -a -- ${_Trash_Dir}/${_Date_Dir}/${_User_Dir} | grep -vE '^\.$|^\.\.$' 2>/dev/null` ; do
                                     if ! grep -qFw "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" $Hist_List 2>/dev/null ; then
                                         if [ "x${_No_Print}" != "xyes" ] ; then
@@ -1779,11 +1780,11 @@ if [ "x$_Install_Alias" = "xyes" ] ; then
 eof
             fi
             cat >> $Trashlog_Bak <<- eof
-            alias rm   "$delete_name -n"
-            alias rl   'unrm -l'
-            alias rla  'unrm -l -u all'
-            alias rd   'unrm -d'
-            alias rr   'unrm -r'
+            alias rm   "${Install_Path}/${delete_name} -n"
+            alias rl   '${Install_Path}/unrm -l'
+            alias rla  '${Install_Path}/unrm -l -u all'
+            alias rd   '${Install_Path}/unrm -d'
+            alias rr   '${Install_Path}/unrm -r'
 eof
 
         else
@@ -1794,11 +1795,11 @@ eof
             fi
 
             cat >> $Trashlog_Bak <<- eof
-            alias rm="$delete_name -n"
-            alias rl='unrm -l'
-            alias rla='unrm -l -u all'
-            alias rd='unrm -d'
-            alias rr='unrm -r'
+            alias rm="${Install_Path}/${delete_name} -n"
+            alias rl='${Install_Path}/unrm -l'
+            alias rla='${Install_Path}/unrm -l -u all'
+            alias rd='${Install_Path}/unrm -d'
+            alias rr='${Install_Path}/unrm -r'
 eof
         fi
         mv -f -- $Trashlog_Bak $_sh_file 2>/dev/null
@@ -1810,11 +1811,11 @@ else
     printf "\n\033[1m# Add following lines in your shell profile\033[0m\n"
     cat <<- eof
     $Def_Path
-    alias rm="$delete_name -n"
-    alias rl='unrm -l'
-    alias rla='unrm -l -u all'
-    alias rd='unrm -d'
-    alias rr='unrm -r'
+    alias rm="${Install_Path}/${delete_name} -n"
+    alias rl='${Install_Path}/unrm -l'
+    alias rla='${Install_Path}/unrm -l -u all'
+    alias rd='${Install_Path}/unrm -d'
+    alias rr='${Install_Path}/unrm -r'
 eof
     fi
 fi
