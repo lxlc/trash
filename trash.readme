@@ -10,6 +10,7 @@
     7、保护挂载分区、/ 分区下所有文件、/tmp不被删除,如:
            / /boot /bin /sbin /lib /lib64 /usr /var /home /opt /etc /sys
            /proc /dev /net /root /tmp /cgroup /selinux /mnt /media
+    8、在HPUX、AIX、Linux、freebsd中经过测试
 
 脚本部署
     帮助
