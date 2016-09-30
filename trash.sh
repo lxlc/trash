@@ -156,6 +156,19 @@ if file "$realrm" 2>/dev/null | grep -qi "text" 2>/dev/null && grep -qi "#Replea
     fi
 fi
 
+if [ "x$realrm" = "x" ] ; then
+    if [ "x$_No_Print" != "xyes" ] ; then
+        printf "\033[1mNot find system rm, install failed, exit\n\033[0m"
+    fi
+    exit 1
+fi
+
+if [ "x$sh_path" = "x" ] ; then
+    if [ "x$_No_Print" != "xyes" ] ; then
+        printf "\033[1mNot find system sh, install failed, exit\n\033[0m"
+    fi
+    exit 1
+fi
 
 # Replace system rm
  
