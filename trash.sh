@@ -10,7 +10,7 @@ Install_Path1=/bin
 
 USAGE() {
     echo "SYNOPSIS"
-    echo "    ${0##*/} [-afhn]  [-d Expire_Day] [-p Install_Path] [-P path1,path2, ...]"
+    echo "    ${0##*/} [-afhn]  [-d Expire_Day] [-p Install_Path] [-P path1,path2, ...] [-y]"
     cat <<- 'eof'
     
     -a                 Install alias
