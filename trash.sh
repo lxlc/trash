@@ -13,13 +13,14 @@ USAGE() {
     echo "    ${0##*/} [-afhn]  [-d Expire_Day] [-p Install_Path] [-P path1,path2, ...] [-y]"
     cat <<- 'eof'
     
-    -a                 Install alias
+    -a                 Install alias and PATH to config files find in pathlist
     -d  day            Specify expire day, default 30
     -f                 Init trash and trashlog directory
     -h                 Display this help and exit
     -n                 No prompt
     -p  path           Specify install path, default /bin
-    -P  pathlist       Write alias to Shell Config files find in pathlist, default all
+    -P  pathlist       Specify pathlist to find shell config files, default all 
+                       seperated by ",", only use with -a
     -y                 Replace system rm
                         
 eof
@@ -1758,7 +1759,7 @@ chmod 555 ${Install_Path}/cleantrash 2>/dev/null
 chown ${Root_Name}:${Root_Group} ${Install_Path}/cleantrash 2>/dev/null
 
 
-# alias
+# Install alias and PATH
 if [ "x$_Install_Alias" = "xyes" ] ; then
 
     # User_Home=`awk -F: '$NF ~ /.*sh$/ {print $6}' /etc/passwd|sort -u|grep -vE "^/$|^$"`
