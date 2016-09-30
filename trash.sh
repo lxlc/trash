@@ -1053,7 +1053,10 @@ then
     exit 1
 fi
 
-
+if [ "x$1" = "xCalled_By_Cleantrash_Mark" ] ; then
+    Called_By_Cleantrash_Mark=yes
+    shift
+fi
 unset _No_Print Dst_path _Hist_List R_Copy List_Filename User_List User_List_Print _No_List  S_ID_List _Delete _Recover _Empty _List _Help
 
 
@@ -1117,13 +1120,13 @@ do
                 local _ID _ID_RE _ID_File _ID_Line ID_Line IDS
                 unset _ID _ID_RE _ID_File _ID_Line ID_Line IDS
 
-                if [ "x${_No_Print}" != "xyes" ] ; then
+                if [ "x${_No_Print}" != "xyes" -a "x$Called_By_Cleantrash_Mark" != "xyes" ] ; then
                     printf "\033[1mDelete the files specified by idlist which recycled by user: $User_List_Print [YES/NO]:[NO]\033[0m"
                     unset reply
                     read reply
                 fi
 
-                if echo $reply | grep -qiE "y|ye|yes" ||  [ "x${_No_Print}" = "xyes" ] ; then
+                if echo $reply | grep -qiE "y|ye|yes" ||  [ "x${Called_By_Cleantrash_Mark}" = "xyes" ] ; then
 
                     # Return ID_List
                     Get_ID_List "$S_ID_List" $Hist_List
@@ -1566,7 +1569,7 @@ if [ $# -eq 0 ] || ! echo  -- "$@" | sed 's/^--[[:space:]]*//' | grep -qE -- "-"
     set -- "-rn"
 fi
 
-unset Expire_Day _No_Print _Hist_List _ID_List _TrashDir User_List User_List_Print _No_List _Recycle _Find _Help
+unset  _No_Print _Hist_List _ID_List _TrashDir User_List User_List_Print _No_List _Recycle _Find _Help
 
 
 while getopts "d:hnp:P:rRu:" Option
@@ -1637,11 +1640,11 @@ do
                              `
                     Hist_List=`echo -- "$Hist_List" | sed 's/^--[[:space:]]*//;s#[[:space:]]*$##;s#[[:space:]][[:space:]]*#,#g'`
                     if [ "x${_ID_List}" != x ] ; then
-                        # if [ "x${_No_Print}" != "xyes" ] ; then
-                        #     $unrm_bin -d   $_ID_List -p $Hist_List >/dev/null 2>&1
-                        # else
-                            $unrm_bin -nd  $_ID_List -p $Hist_List >/dev/null 2>&1
-                        # fi
+                        if [ "x${_No_Print}" != "xyes" ] ; then
+                            $unrm_bin Called_By_Cleantrash_Mark -d   $_ID_List -p $Hist_List
+                        else
+                            $unrm_bin Called_By_Cleantrash_Mark -nd  $_ID_List -p $Hist_List
+                        fi
                     fi
                 fi
             }
@@ -1778,9 +1781,7 @@ if [ "x$_Install_Alias" = "xyes" ] ; then
     for _sh_file in $_Profile_List $_Profile_List_Csh $Profile_List; do
         Get_Trashlog_Bak $_sh_file
         [ ! -w $_sh_file -o "x$Trashlog_Bak" = "x" ] && continue
-        sed  '/^[[:space:]]*alias[[:space:]]*_rm[[:space:]=]*/d;
-              /^[[:space:]]*alias[[:space:]]*rm[[:space:]=]*/d;
-              /^[[:space:]]*alias[[:space:]]*rF[[:space:]=]*/d;
+        sed  '/^[[:space:]]*alias[[:space:]]*rm[[:space:]=]*/d;
               /^[[:space:]]*alias[[:space:]]*rl[[:space:]=]*/d;
               /^[[:space:]]*alias[[:space:]]*rla[[:space:]=]*/d;
               /^[[:space:]]*alias[[:space:]]*rd[[:space:]=]*/d;
