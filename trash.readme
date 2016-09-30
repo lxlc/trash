@@ -81,7 +81,7 @@
 trash.sh -h
 
     SYNOPSIS
-        trash.sh [-afhn]  [-d Expire_Day] [-p Install_Path] [-P path1,path2, ...]
+        trash.sh [-afhn]  [-d Expire_Day] [-p Install_Path] [-P path1,path2, ...] [-y]
         
         -a                 Install alias
         -d  day            Specify expire day, default 30
