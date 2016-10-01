@@ -275,7 +275,7 @@ ID User   Date       Time     SourcePath               TrashPath
 [root@localhost tmp]# ls /
 ~`!@#$%^&*()_-+={[}]|\:;'",<.>?
 
-[root@localhost tmp]# rm ~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\? 
+[root@localhost tmp]# rm /~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\? 
 /~`!@#$%^&*()_-+={[}]|\:;'",<.>? is preserved, if you really want to delete it, please perform:
     /usr/bin/rm /~`!@#$%^&*()_-+={[}]|\:;'",<.>?
 
