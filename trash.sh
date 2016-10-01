@@ -142,10 +142,16 @@ Root_Gid=`  awk -F: '$3 == 0 {print $4}' /etc/passwd | head -1`
 Root_Group=`awk -F: '$3 == '"$Root_Gid"' {print $1}' /etc/group | head -1`
 delete_name=delete
 
+if [ "x$realrm" = "x" ] ; then
+    if [ "x$_No_Print" != "xyes" ] ; then
+        printf "\033[1mNot find system rm, install failed, exit\n\033[0m"
+    fi
+    exit 1
+fi
 
 if file "$realrm" 2>/dev/null | grep -qi "text" 2>/dev/null && grep -qi "#Repleace_Mark" "$realrm" 2>/dev/null ; then
     _realrm=`awk -F'=' '$0 ~ /^#realrm/ {print $2}' "$realrm" 2>/dev/null | head -1`
-    if [ "x$_realrm" != "x" ] ; then
+    if [ "x$_realrm" != "x" -a -x $_realrm ] ; then
         Old_realrm=$realrm
         realrm=$_realrm
     else
@@ -156,12 +162,6 @@ if file "$realrm" 2>/dev/null | grep -qi "text" 2>/dev/null && grep -qi "#Replea
     fi
 fi
 
-if [ "x$realrm" = "x" ] ; then
-    if [ "x$_No_Print" != "xyes" ] ; then
-        printf "\033[1mNot find system rm, install failed, exit\n\033[0m"
-    fi
-    exit 1
-fi
 
 if [ "x$sh_path" = "x" ] ; then
     if [ "x$_No_Print" != "xyes" ] ; then
@@ -349,7 +349,10 @@ Get_Real_Argv()
     unset Mount_List
     Mount_List=`ls -a / | grep -vE '^\.$|^\.\.$' | sed 's#^\([^/]*\)#/\1#'`
 
-    Mount_List="$Mount_List"" $_mount"" / /tmp"
+    Mount_List="$Mount_List""
+$_mount""
+/
+/tmp"
 
 
 
@@ -417,21 +420,23 @@ for _File_check in $_Del_File ; do
     # [ "x${_No_Print}" != "xyes" ] && \
         Print_fullpath=$(echo -- "$fullpath" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
 
-    fullpath=$( echo -- $fullpath | sed 's/^--[[:space:]]*//;s#\\#\\\\#g;
-                                                            s#\*#\\*#g;
-                                                            s#\.#\\.#g;
-                                                            s#\?#\\?#g;
-                                                            s#\+#\\+#g;
-                                                            s#(#\\(#g;
-                                                            s#)#\\)#g;
-                                                            s#|#\\|#g;
-                                                            s#\[#\\[#g;
-                                                            s#\]#\\]#g;
-                                                            s#\^#\\^#g;
-                                                            s#\$#\\$#g
-                                        '
-            )
-    if echo -- "${Mount_List}" | sed 's/--[[:space:]]*//' | grep -qE "(^|[[:space:]][[:space:]]*)${fullpath}([[:space:]][[:space:]]*|$)" 2>/dev/null ; then
+    # fullpath=$( echo -- $fullpath | sed 's/^--[[:space:]]*//;s#\\#\\\\#g;
+    #                                                         s#\*#\\*#g;
+    #                                                         s#\.#\\.#g;
+    #                                                         s#\?#\\?#g;
+    #                                                         s#\+#\\+#g;
+    #                                                         s#(#\\(#g;
+    #                                                         s#)#\\)#g;
+    #                                                         s#|#\\|#g;
+    #                                                         s#\[#\\[#g;
+    #                                                         s#\]#\\]#g;
+    #                                                         s#\^#\\^#g;
+    #                                                         s#\$#\\$#g
+    #                                     '
+    #         )
+    # if echo -- "${Mount_List}" | sed 's/--[[:space:]]*//' | grep -qE "(^|[[:space:]][[:space:]]*)${fullpath}([[:space:]][[:space:]]*|$)" 2>/dev/null ; then
+    Fullpath_Awk=$(echo -- "${fullpath}" | sed 's/--[[:space:]]*//;s#\\#\\\\#g;s#"#\\"#g')
+    if [ ` echo -- "${Mount_List}" | sed 's/--[[:space:]]*//' | awk '$0 == "'"$Fullpath_Awk"'"' 2>/dev/null | wc -l ` -ne 0 ] ; then
         # [ "x${_No_Print}" != "xyes" ] && \
         printf "\033[1m$Print_fullpath is preserved, if you really want to delete it, please perform:\033[0m\n    $realrm $Print_fullpath\n"
         # printf "OR:\n  \033[1m$0 -F\033[0m\n"
@@ -1396,11 +1401,8 @@ if [ "x$_Empty" = "xyes" ] && [ "x$R_Copy" = "xyes" -o "x$List_Filename" = "xyes
     exit 1
 fi
 
-if [ "x$_Help" = "xyes" ] && [ "x$R_Copy" = "xyes" -o "x$_Delete" = "xyes" -o "x$List_Filename" = "xyes" -o "x$_Empty" = "xyes" -o "x$_Recover" = "xyes" -o "x$User_List" != "x" -o  "x$_Hist_List" != "x"  -o  "x$Dst_path" != "x" -o "x$_No_Print" = "xyes" -o "x$_List" = "xyes" ] ; then
-    USAGE
-    exit 1
-fi
-if [ "x$_List" = "xyes" ] && [ "x$R_Copy" = "xyes" -o "x$_Recover" = "xyes" -o "x$Dst_path" != "x" -o "x$_No_Print" = "xyes" ] ; then
+
+if [ "x$_List" = "xyes" ] && [ "x$R_Copy" = "xyes" -o "x$_Recover" = "xyes" -o "x$Dst_path" != "x" ] ; then
     USAGE
     exit 1
 fi
@@ -1696,21 +1698,8 @@ do
                         for  _Date_Dir in `ls -al -- $_Trash_Dir 2>/dev/null | awk '$0 ~ /^d/ && $NF ~ /^[[:digit:]]*$/ {print $NF}' 2>/dev/null ` ; do
                             for _User_Dir in `ls -al -- ${_Trash_Dir}/${_Date_Dir} 2>/dev/null | awk '$0 ~ /^d/ && $NF !~ /^\.$|^\.\.$/ && $NF ~ /'"$User_List"'/ {print $NF}' 2>/dev/null` ; do
                                 for _File in `ls -a -- ${_Trash_Dir}/${_Date_Dir}/${_User_Dir} | grep -vE '^\.$|^\.\.$' 2>/dev/null` ; do
-                                    _Find_Name=$( echo -- ${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File} | sed 's/^--[[:space:]]*//;s#\\#\\\\#g;
-                                                                                                                                      s#\*#\\*#g;
-                                                                                                                                      s#\.#\\.#g;
-                                                                                                                                      s#\?#\\?#g;
-                                                                                                                                      s#\+#\\+#g;
-                                                                                                                                      s#(#\\(#g;
-                                                                                                                                      s#)#\\)#g;
-                                                                                                                                      s#|#\\|#g;
-                                                                                                                                      s#\[#\\[#g;
-                                                                                                                                      s#\]#\\]#g;
-                                                                                                                                      s#\^#\\^#g;
-                                                                                                                                      s#\$#\\$#g
-                                                                                                                '
-                                            )
-                                    if ! grep -qE "[[:space:]][[:space:]]*${_Find_Name}[[:space:]]*$" $Hist_List 2>/dev/null ; then
+                                    # if ! grep -qFw "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" $Hist_List 2>/dev/null ; then
+                                    if [ `awk '$NF == "'"${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}"'"' $Hist_List 2>/dev/null | wc -l ` -eq 0 ]; then
                                         if [ "x${_No_Print}" != "xyes" ] ; then
                                             Print_filename=$(echo -- "${_Trash_Dir}/${_Date_Dir}/${_User_Dir}/${_File}" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
                                             printf "Find $Print_filename"
@@ -1733,7 +1722,7 @@ do
 done
 
 
-if [ "x$_Find" = "xyes" ] && [ "x$Expire_Day" != "x" -o "x$_Recycle" = "xyes" ] ; then
+if [ "x$_Find" = "xyes" ] && [ "x$_Recycle" = "xyes" ] ; then
     USAGE
     exit 1
 fi
@@ -1743,10 +1732,7 @@ if [ "x$_Recycle" = "xyes" ] && [ "x$_TrashDir" != "x" ] ; then
     exit 1
 fi
 
-if [ "x$_Help" = "xyes" ] && [ "x$Expire_Day" != "x" -o "x$_No_Print" = "xyes" -o "x$_Hist_List" != "x" -o "x$_TrashDir" != "x" -o "x$_Recycle" = "xyes" -o "x$_Find" = "xyes" -o "x$User_List" != "x" ] ; then
-    USAGE
-    exit 1
-fi
+
 
 # [ "x$_No_Print" != "xyes" ] && _No_Print=no
 
