@@ -83,7 +83,7 @@
 #################################################################################################################
 trash.sh -h
     SYNOPSIS
-        a.sh [-afhn]  [-d Expire_Day] [-N MAX_Files_Num]  [-p Install_Path] [-P path1,path2, ...] [-S MAX_File_Size ] [-y]
+        trash.sh [-afhn]  [-d Expire_Day] [-N MAX_Files_Num]  [-p Install_Path] [-P path1,path2, ...] [-S MAX_File_Size ] [-y]
         
         -a                   Install alias and PATH to config files find in pathlist
         -d  day              Specify expire day, default 30
