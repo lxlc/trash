@@ -10,18 +10,20 @@ Install_Path1=/bin
 
 USAGE() {
     echo "SYNOPSIS"
-    echo "    ${0##*/} [-afhn]  [-d Expire_Day] [-p Install_Path] [-P path1,path2, ...] [-y]"
+    echo "    ${0##*/} [-afhn]  [-d Expire_Day] [-N MAX_Files_Num]  [-p Install_Path] [-P path1,path2, ...] [-S MAX_File_Size ] [-y]"
     cat <<- 'eof'
     
-    -a                 Install alias and PATH to config files find in pathlist
-    -d  day            Specify expire day, default 30
-    -f                 Init trash and trashlog directory
-    -h                 Display this help and exit
-    -n                 No prompt
-    -p  path           Specify install path, default /bin
-    -P  pathlist       Specify pathlist to find shell config files, default all 
-                       seperated by ",", only use with -a
-    -y                 Replace system rm
+    -a                   Install alias and PATH to config files find in pathlist
+    -d  day              Specify expire day, default 30
+    -f                   Init trash and trashlog directory
+    -h                   Display this help and exit
+    -n                   No prompt
+    -N  MAX_Files_Num    Maximum number of files that can be recovered at a time, default 20
+    -p  path             Specify install path, default /bin
+    -P  pathlist         Specify pathlist to find shell config files, default all 
+                         seperated by ",", only use with -a
+    -S  MAX_File_Size    Maximum file size can be recovered each time, default 4096MB
+    -y                   Replace system rm
                         
 eof
 }
@@ -66,15 +68,14 @@ Get_Trashlog_Bak()
     done
 }
 
-while getopts "ad:fhnp:P:y" Option
+while getopts "ad:fhnN:p:P:S:y" Option
 do
     case "$Option" in
         a)
             _Install_Alias=yes
             ;;
-
         d)
-            Expire_Day1="$OPTARG"
+            Expire_Day="$OPTARG"
             ;;
         f)
             _Init_Fold=yes
@@ -83,7 +84,9 @@ do
             USAGE
             exit 0
             ;;
-
+        N)
+            MAX_Files_Num="$OPTARG"
+            ;;
         n)
             _No_Print=yes
             ;;
@@ -92,6 +95,9 @@ do
             ;;
         P)
             Shell_Config_Find_Path=`echo -- "$OPTARG" | sed 's/^--[[:space:]]*//;s#,,*# #g'`
+            ;;
+        S)
+            MAX_File_Size="$OPTARG"
             ;;
         y)
             Replace_system_rm=yes
@@ -125,14 +131,29 @@ fi
 Install_Path=${Install_Path%/}
 
 # Set Expire_Day
-[ "x${Expire_Day1}" = x ] && Expire_Day=30
-if [ "x$_No_Print" != "xyes" ] ; then
+if [ "x$_No_Print" != "xyes" -a "x${Expire_Day}" = x ] ; then
     printf "\033[1mSpecify expiration days of deleted files:[30]\033[0m"
     unset Expire_Day
     read Expire_Day
 fi
-[ "x${Expire_Day}" = x ] && Expire_Day=$Expire_Day1
+[ "x${Expire_Day}" = x ] && Expire_Day=30
 
+
+# set MAX_Files_Num
+if [ "x$_No_Print" != "xyes" -a "x${MAX_Files_Num}" = x ] ; then
+    printf "\033[1mSpecify maximum number of recovered files:[20]\033[0m"
+    unset MAX_Files_Num
+    read MAX_Files_Num
+fi
+[ "x${MAX_Files_Num}" = x ] && MAX_Files_Num=20
+
+# set MAX_File_Size
+if [ "x$_No_Print" != "xyes" -a "x${MAX_File_Size}" = x ] ; then
+    printf "\033[1mSpecify maximum size of recovered file(MB):[4096]\033[0m"
+    unset MAX_File_Size
+    read MAX_File_Size
+fi
+[ "x${MAX_File_Size}" = x ] && MAX_File_Size=4096
 
 Def_Path="export PATH=$Install_Path:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:\$PATH"
 sh_path=`find  /bin /sbin /usr/bin /usr/sbin /usr/local/bin /usr/local/sbin -name sh 2>/dev/null | head -1`
@@ -149,9 +170,10 @@ if [ "x$realrm" = "x" ] ; then
     exit 1
 fi
 
+# file realrm
 if file "$realrm" 2>/dev/null | grep -qi "text" 2>/dev/null && grep -qi "#Repleace_Mark" "$realrm" 2>/dev/null ; then
     _realrm=`awk -F'=' '$0 ~ /^#realrm/ {print $2}' "$realrm" 2>/dev/null | head -1`
-    if [ "x$_realrm" != "x" -a -x $_realrm ] ; then
+    if [ "x$_realrm" != "x" -a -x $_realrm -a file "$_realrm" 2>/dev/null | grep -qi "executable" ] ; then
         Old_realrm=$realrm
         realrm=$_realrm
     else
@@ -163,6 +185,7 @@ if file "$realrm" 2>/dev/null | grep -qi "text" 2>/dev/null && grep -qi "#Replea
 fi
 
 
+# find sh
 if [ "x$sh_path" = "x" ] ; then
     if [ "x$_No_Print" != "xyes" ] ; then
         printf "\033[1mNot find system sh, install failed, exit\n\033[0m"
@@ -249,6 +272,9 @@ eof
 echo "realrm=$realrm"                        >> ${Install_Path}/${delete_name}
 echo "$Def_Path"                             >> ${Install_Path}/${delete_name}
 echo "trashlog_bin=${Install_Path}/trashlog" >> ${Install_Path}/${delete_name}
+echo "MAX_Files_Num=$MAX_Files_Num"          >> ${Install_Path}/${delete_name}
+echo "MAX_File_Size=$MAX_File_Size"          >> ${Install_Path}/${delete_name}
+
 
 cat >> ${Install_Path}/${delete_name} <<- 'eof'
 
@@ -270,7 +296,7 @@ USAGE() {
     cat <<- 'EOF'
     -f                    Ignore nonexistent files, never prompt
     -F                    Use system command "rm", but cannot delete preserved files
-    -h, --help            Display this help and exit
+    -h                    Display this help and exit
     -i                    Prompt before every removal
     -r, -R                Remove directories and their contents recursively
     -n                    No prompt
@@ -401,7 +427,7 @@ fi
 
 
 
-if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -iqwE -- "-*h|--help|--he|--hel" ; then
+if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -iqwE -- "-h" ; then
     USAGE
     exit 0
 fi
@@ -411,6 +437,14 @@ if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -qE -- "n|N" 2>/dev/null; 
     _No_Print=yes
 else
     _No_Print=no
+fi
+
+
+Del_File_Num=`echo -- "$_Del_File" | sed 's/^--[[:space:]]*//' | awk '{print NF}'`
+if [ "$Del_File_Num" -ge "$MAX_Files_Num" ] ; then
+    printf "\033[1mThe number of specified files more than $MAX_Files_Num, if you really want to delete them, use:\033[0m\n  $realrm\n"
+    printf "\033[1mOR:\033[0m\n  rsync -a --delete\n"
+    exit 1
 fi
 
 
@@ -438,7 +472,7 @@ for _File_check in $_Del_File ; do
     Fullpath_Awk=$(echo -- "${fullpath}" | sed 's/--[[:space:]]*//;s#\\#\\\\#g;s#"#\\"#g')
     if [ ` echo -- "${Mount_List}" | sed 's/--[[:space:]]*//' | awk '$0 == "'"$Fullpath_Awk"'"' 2>/dev/null | wc -l ` -ne 0 ] ; then
         # [ "x${_No_Print}" != "xyes" ] && \
-        printf "\033[1m$Print_fullpath is preserved, if you really want to delete it, please perform:\033[0m\n    $realrm $Print_fullpath\n"
+        printf "\033[1m$Print_fullpath is preserved, if you really want to delete it, please use:\033[0m\n    $realrm $Print_fullpath\n"
         # printf "OR:\n  \033[1m$0 -F\033[0m\n"
         exit 1
     fi
@@ -474,13 +508,25 @@ if echo -- "$ARGV" | sed 's/^--[[:space:]]*//' | grep -q "F" 2>/dev/null ; then
     exit $?
 fi
 
+
+
+unset reply
+
 if [ "x${_No_Print}" != "xyes" ] ; then
     printf "\033[1mBy default, specified files will be moved to the trash directory\033[0m\n"
     printf "\033[1mUse \"unrm\" to recover or to empty trash directory\033[0m\n"
     printf "\033[1mDirectly delete the specified files[YES/NO]:[NO]\033[0m\a"
-    unset reply
     read reply
     echo ""
+fi
+
+if [ "x$reply" = "x" ] ; then
+    if [ "$Del_File_Num" -ge "$MAX_Files_Num" ] ; then
+        printf "\033[1mThe number of specified files more than $MAX_Files_Num, Directly delete[YES/NO]:[NO]\033[0m\a"
+        read reply
+        echo ""
+        [ "x$reply" = "x" ] && exit $?
+    fi
 fi
 
 if echo "$reply" | grep -qiE "y|ye|yes" 2>/dev/null ; then
@@ -502,11 +548,11 @@ else
         if [ "x${_No_Print}" != "xyes" ] ; then
             Print_File=$(echo -- "$file" | sed 's/--[[:space:]]*//;s#%#%%#g;s#\\#\\\\#g')
         fi
-
-        if ls --  $file >/dev/null 2>&1 && [ `du -s -- $file|awk '{print $1}'` -gt 8388608 ]
+        MAX_Size=`echo "$MAX_File_Size*2*1024" | bc`
+        if ls --  $file >/dev/null 2>&1 && [ `du -s -- $file|awk '{print $1}'` -gt "$MAX_Size" ]
         then
             if [ "x${_No_Print}" != "xyes" ] ; then
-                printf "\033[1m$Print_File is larger than 4G, deleted directly[YES/NO]:[NO]\033[0m"
+                printf "\033[1m$Print_File is larger than "$MAX_File_Size"MB, deleted directly[YES/NO]:[NO]\033[0m"
                 unset reply
                 read reply
             fi
@@ -527,7 +573,7 @@ else
                 :
             else
                 if [ "x${_No_Print}" != "xyes" ] ; then
-                    printf "\033[1m$Print_File larger than 4G, specify -F delete directly, -N force to move to trash directory\033[0m\n"
+                    printf "\033[1m$Print_File larger than "$MAX_File_Size"MB, specify -F delete directly, -N force to move to trash directory\033[0m\n"
                 fi
                 continue
             fi
@@ -1850,7 +1896,7 @@ if [ "x$_Init_Fold" = "xyes" ] ; then
         done
 else
     if [ "x$_No_Print" != "xyes" ] ; then
-        printf "\n\033[1m# Execute the following command with root\033[0m\n"
+        printf "\n\033[1m# Execute the following command with root to initialize trash folders\033[0m\n"
         cat <<- 'eof'
     _mount=`df -P |awk ' $NF ~ /^\//{print $NF}'`
     for _Mount_Point in $_mount ; do

@@ -23,6 +23,9 @@
         sh trash.sh -n -d 30   设置回收站文件过期天数
         sh trash.sh -n -f      初始化回收站、日志文件夹(需root权限)
         sh trash.sh -n -a      在shell配置文件中安装alias, -P 指定查找配置文件的位置
+        sh trash.sh -n -N 20   指定每次可回收的最大文件数，回收过多影响系统性能，超过阀值，不会执行任何操作
+        sh trash.sh -n -S 4096 指定可回收的最大文件大小，默认超过4096MB的文件会提示直接删除
+
 
 
 已知问题：
@@ -79,19 +82,20 @@
 帮助：
 #################################################################################################################
 trash.sh -h
-
     SYNOPSIS
-        trash.sh [-afhn]  [-d Expire_Day] [-p Install_Path] [-P path1,path2, ...] [-y]
+        a.sh [-afhn]  [-d Expire_Day] [-N MAX_Files_Num]  [-p Install_Path] [-P path1,path2, ...] [-S MAX_File_Size ] [-y]
         
-        -a                 Install alias and PATH to config files find in pathlist
-        -d  day            Specify expire day, default 30
-        -f                 Init trash and trashlog directory
-        -h                 Display this help and exit
-        -n                 No prompt
-        -p  path           Specify install path, default /bin
-        -P  pathlist       Specify pathlist to find shell config files, default all 
-                           seperated by ",", only use with -a
-        -y                 Replace system rm
+        -a                   Install alias and PATH to config files find in pathlist
+        -d  day              Specify expire day, default 30
+        -f                   Init trash and trashlog directory
+        -h                   Display this help and exit
+        -n                   No prompt
+        -N  MAX_Files_Num    Maximum number of files that can be recovered at a time, default 20
+        -p  path             Specify install path, default /bin
+        -P  pathlist         Specify pathlist to find shell config files, default all 
+                             seperated by ",", only use with -a
+        -S  MAX_File_Size    Maximum file size can be recovered each time, default 4096MB
+        -y                   Replace system rm
 #################################################################################################################
 
 #################################################################################################################
@@ -106,7 +110,7 @@ delete -h
 
         -f                    Ignore nonexistent files, never prompt
         -F                    Use system command "rm", but cannot delete preserved files
-        -h, --help            Display this help and exit
+        -h                    Display this help and exit
         -i                    Prompt before every removal
         -r, -R                Remove directories and their contents recursively
         -n                    No prompt
