@@ -1,0 +1,326 @@
+# trash
+recycle bin for unix
+
+实现功能：
+    1、文件的回收
+    2、回收站的列表,恢复,删除,清空,定时清理过期文件
+    3、查找已被回收,但未记录在日志中的文件
+    4、所有相关的操作,均保留文件的原始权限,避免未经授权的访问
+    5、非root用户,仅可操作自己回收的文件,root用户可操作所有用户回收的文件
+    6、文件名支持特殊字符(空白符除外)
+    7、保护挂载分区、/ 分区下所有文件、/tmp不被删除,如:
+           / /boot /bin /sbin /lib /lib64 /usr /var /home /opt /etc /sys
+           /proc /dev /net /root /tmp /cgroup /selinux /mnt /media
+    8、替换系统rm,将原rm命令备份
+    9、在HPUX、AIX、Linux、freebsd中测试通过
+
+脚本部署
+    帮助
+        sh trashsh -h
+    交互安装
+        sh trash.sh
+    静默安装 加-n
+        sh trash.sh -b /bin/
+        sh trash.sh -n -d 30   设置回收站文件过期天数
+        sh trash.sh -n -f      初始化回收站、日志文件夹(需root权限)
+        sh trash.sh -n -a      在shell配置文件中安装alias, -P 指定查找配置文件的位置
+        sh trash.sh -n -N 20   指定每次可回收的最大文件数，回收过多影响系统性能，超过阀值，不会执行任何操作
+        sh trash.sh -n -S 4096 指定可回收的最大文件大小，默认超过4096MB的文件会提示直接删除
+
+
+
+已知问题：
+    所指定的待回收文件、日志文件、回收站文件,其文件名中不能包含"/" (unix限制)
+    待回收文件的文件名中不能包含空白符 [[:space:]]*
+    unrm cleantrash 通过-p 指定的日志列表中,文件名不能包含","
+    trash.sh cleantrash  通过-P 指定的文件列表中,文件名不能包含","
+    系统负载较高时,执行速度略慢
+
+注意：
+
+    * 空白符作为文件名分隔符,含空白符的文件将被视为多个文件,用系统自带的"rm"删除此类文件
+
+    * 文件名中的特殊字符需要转义
+        \~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\?
+
+    * 为提高执行效率,建议初始化日志目录和回收站目录
+        sh trash.sh -f
+
+    1、需修改/tmp目录权限
+        chmod 777 /tmp
+        chmod +t /tmp
+
+    2、日志文件按优先顺序存放(正则表示),如果以下目录均不可写,则记日志失败
+        1、/etc/.trashlog[1-9]
+        2、$HOME/.trashlog[1-9]
+        3、/tmp/.trashlog[1-9]
+        4、/tmp
+
+    3、回收站目录优先顺序(正则表示),如果以下目录均不可写,则记文件回收失败
+        1、回收文件对应的挂载点的根目录,/tmp,如:
+            # df -P
+            Filesystem      512-blocks    Used    Avail Capacity  Mounted on
+            /dev/gpt/rootfs   40614392 2705832 34659416     7%    /
+            devfs          
+                      2       2        0   100%    /dev
+        2、回收文件与回收站的对应关系为：
+                待删文件           回收站
+            /etc/test.conf     /.trash/20160925/root
+            /dev/testfile      /dev/.trash/20160925/root
+            /tmp/testfile      /tmp/.trash/20160925/root
+
+        3、如果1中的回收站无法访问,则回收站设置为回收文件父目录
+            ${file%/*}/.trash[1-9]/`date "+%Y%m%d"`/`id -un`
+
+部署后文件:
+    trash.sh            原始脚本文件,执行此文件安装即可
+    delete              文件删除
+    trashlog            记录日志,由delete,cleantrash调用
+    unrm                列表,恢复,删除,清空回收站
+    cleantrash          定时清理过期文件,查找已被回收,但未记录在日志中的文件
+
+
+帮助：
+#################################################################################################################
+trash.sh -h
+    SYNOPSIS
+        trash.sh [-afhn]  [-d Expire_Day] [-N MAX_Files_Num]  [-p Install_Path] [-P path1,path2, ...] [-S MAX_File_Size ] [-y]
+        
+        -a                   Install alias and PATH to config files find in pathlist
+        -d  day              Specify expire day, default 30
+        -f                   Init trash and trashlog directory
+        -h                   Display this help and exit
+        -n                   No prompt
+        -N  MAX_Files_Num    Maximum number of files that can be recovered at a time, default 20
+        -p  path             Specify install path, default /bin
+        -P  pathlist         Specify pathlist to find shell config files, default all 
+                             seperated by ",", only use with -a
+        -S  MAX_File_Size    Maximum file size can be recovered each time, default 4096MB
+        -y                   Replace system rm
+#################################################################################################################
+
+#################################################################################################################
+delete -h
+
+    SYNOPSIS
+        delete [-N | -n] [-F] [-f | -i] [-r | -R] [-h] [--] file ...
+    Description
+        This is an auxiliary scripts of /bin/rm, povides a function similar to the Recycle Bin
+        Only -N -n -F -h control the actions of this scripts
+        Other variables like -i -f -r -R will be passed to /bin/rm 
+
+        -f                    Ignore nonexistent files, never prompt
+        -F                    Use system command "rm", but cannot delete preserved files
+        -h                    Display this help and exit
+        -i                    Prompt before every removal
+        -r, -R                Remove directories and their contents recursively
+        -n                    No prompt
+        -N                    Same as -n, but force to move Files to trash directory
+
+    Warning
+        /bin/delete depends on /bin/rm, can not overwrite or delete /bin/rm 
+        File name is seperated by blank characters
+        Special characters need to escape
+        \~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\?
+
+    SEE ALSO: "unrm" to recover or to empty trash directory
+    SEE ALSO: "/bin/rm --help"
+#################################################################################################################
+
+#################################################################################################################
+unrm -h
+
+    SYNOPSIS
+         unrm [-h]
+         unrm <-d id1,id2 ... | [-c] [-P path] -r id1,id2 ...| -F | -l [-f]>
+              [-p path1,path2 ... ] [-n] [-u user1,user2 ...]
+    DESCRIPTION
+         Recover the deleted files, or delete files from the trash directory
+         Idlist format: "ID-","-ID","ID1-ID2","ID"
+
+        -c                 Only use with -r, copy instead of move
+        -d idlist          Delete files associated with the idlist, seperated by ","
+        -f                 Only use with -l, list filename of history file instead of contents 
+        -F                 IF specify -u, will delete the files belong to userlist in
+                           trash directory, otherwise, will empyt trash directory
+        -h                 Display this help and exit
+        -l                 List trash history
+        -n                 Never prompt
+        -p pathlist        Specify trash history file list, seperated by ","
+        -P path            Recover destpath, only use with -r
+        -r idlist          Recover the files associated with the idlist, seperated by ","
+        -u userlist        Specify user to filter the history, seperated by ","                  
+                           special user:"all" and "unknow"
+                           all:list trash history of all users
+                           unknow: deleted files in trash directory, find by "cleantrash"
+#################################################################################################################
+
+#################################################################################################################
+cleantrash -h
+
+    SYNOPSIS
+         cleantrash [-h]
+         cleantrash <-r [-d hold_Day] | -R [-P path1,path2 ...]> [-p path1,path2 ...] [-n] [-u user1,user2 ...]
+    DESCRIPTION
+         Delete expired files or Find deleted files not marked in logfiles
+
+        -d hold_Day        Specify expiration days of deleted files, only use with -r
+        -h                 Display this help and exit
+        -n                 Never prompt
+        -p pathlist        Specify trash history file list, seperated by ","
+        -P pathlist        Specify trash directory, only use with -R, seperated by ","
+        -r                 Delete expired files
+        -R                 Find deleted files not marked in logfiles
+        -u userlist        Specify user to filter the history, seperated by ","                  
+                           special user:"all" and "unknow"
+                           all:list trash history of all users
+                           unknow: deleted files in trash directory, find by "cleantrash"
+#################################################################################################################
+
+示例：
+#################################################################################################################
+
+# ALIAS
+[root@localhost root]#alias
+rm='delete -n'
+rl='unrm -l'
+rla='unrm -l -u all'
+rd='unrm -d'
+rr='unrm -r'
+#################################################################################################################
+
+# 回收
+[root@localhost root]#pwd
+/root/a
+[root@localhost root]#rla
+[root@localhost root]#touch a b c 1 2 3 4 5 6 7
+[root@localhost root]#ls
+1   2   3   4   5   6   7   a   b   c
+[root@localhost root]rm a 1
+[root@localhost root]rm -F b 2
+[root@localhost root]rla
+ID User Date       Time     SourcePath TrashPath
+1  root 2016-09-24 13:28:42 /root/a/a  /.trash/20160924/root
+2  root 2016-09-24 13:28:42 /root/a/1  /.trash/20160924/root
+[root@localhost root]ls
+3   4   5   6   7   c
+[root@localhost root]rm *
+[root@localhost root]rla
+ID User Date       Time     SourcePath TrashPath
+1  root 2016-09-24 13:29:14 /root/a/c  /.trash/20160924/root
+2  root 2016-09-24 13:29:14 /root/a/7  /.trash/20160924/root
+3  root 2016-09-24 13:29:14 /root/a/6  /.trash/20160924/root
+4  root 2016-09-24 13:29:14 /root/a/5  /.trash/20160924/root
+5  root 2016-09-24 13:29:14 /root/a/4  /.trash/20160924/root
+6  root 2016-09-24 13:29:14 /root/a/3  /.trash/20160924/root
+7  root 2016-09-24 13:28:42 /root/a/a  /.trash/20160924/root
+8  root 2016-09-24 13:28:42 /root/a/1  /.trash/20160924/root
+#################################################################################################################
+
+# 还原
+[root@localhost root]#mkdir /tmp/test
+[root@localhost root]#rr  1 -P /tmp/test -n 
+[root@localhost root]#rla
+ID User Date       Time     SourcePath TrashPath
+1  root 2016-09-24 13:29:14 /root/a/7  /.trash/20160924/root
+2  root 2016-09-24 13:29:14 /root/a/6  /.trash/20160924/root
+3  root 2016-09-24 13:29:14 /root/a/5  /.trash/20160924/root
+4  root 2016-09-24 13:29:14 /root/a/4  /.trash/20160924/root
+5  root 2016-09-24 13:29:14 /root/a/3  /.trash/20160924/root
+6  root 2016-09-24 13:28:42 /root/a/a  /.trash/20160924/root
+[root@localhost root]#ls /tmp/test
+c
+[root@localhost root]#rr -2 -nc -P /tmp/test
+[root@localhost root]#rla
+ID User Date       Time     SourcePath TrashPath
+1  root 2016-09-24 13:29:14 /root/a/7  /.trash/20160924/root
+2  root 2016-09-24 13:29:14 /root/a/6  /.trash/20160924/root
+3  root 2016-09-24 13:29:14 /root/a/5  /.trash/20160924/root
+4  root 2016-09-24 13:29:14 /root/a/4  /.trash/20160924/root
+5  root 2016-09-24 13:29:14 /root/a/3  /.trash/20160924/root
+6  root 2016-09-24 13:28:42 /root/a/a  /.trash/20160924/root
+[root@localhost root]#ls /tmp/test
+6   7   c
+#################################################################################################################
+
+# 删除,清空回收站
+[root@localhost root]#rd -1,2-3,5,6- -n -u all
+[root@localhost root]#rla
+ID User Date       Time     SourcePath TrashPath
+1  root 2016-09-24 13:29:14 /root/a/3  /.trash/20160924/root
+[root@localhost root]#unrm -Fn
+[root@localhost root]#rla
+[root@localhost root]# 
+#################################################################################################################
+
+#################################################################################################################
+
+# 查找已被回收,但未记录在日志中的文件
+[root@localhost root]#rl -fuall
+[root@localhost root]#cleantrash -R
+Find deleted files not marked in logfiles [YES/NO]:[NO]y
+Find /tmp/.trash/20160924/root/a.sh_2016-09-24_12:43:48
+Find /tmp/.trash/20160924/root/a_2016-09-24_12:43:42
+Find /tmp/.trash/20160924/root/a_2016-09-24_12:44:12
+Find /.trash/20160924/root/1_2016-09-24_13:28:42
+Find /.trash/20160924/root/awk.core
+[root@localhost root]#rla
+ID User   Date       Time     SourcePath               TrashPath
+1  unknow 2016-09-24 13:54:56 awk.core                 /.trash/20160924/root
+2  unknow 2016-09-24 13:54:56 a_2016-09-24_12:44:12    /tmp/.trash/20160924/root
+3  unknow 2016-09-24 13:54:56 a_2016-09-24_12:43:42    /tmp/.trash/20160924/root
+4  unknow 2016-09-24 13:54:56 a.sh_2016-09-24_12:43:48 /tmp/.trash/20160924/root
+5  unknow 2016-09-24 13:54:56 1_2016-09-24_13:28:42    /.trash/20160924/root
+[root@localhost root]#
+#################################################################################################################
+
+#################################################################################################################
+
+# 特殊字符支持
+[root@localhost tmp]# ls /
+~`!@#$%^&*()_-+={[}]|\:;'",<.>?
+
+[root@localhost tmp]# rm /~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\? 
+/~`!@#$%^&*()_-+={[}]|\:;'",<.>? is preserved, if you really want to delete it, please perform:
+    /usr/bin/rm /~`!@#$%^&*()_-+={[}]|\:;'",<.>?
+
+[root@localhost tmp]# mv /~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\?  /tmp
+
+[root@localhost tmp]# rm \~\`\!\@#\$%\^\&\*\(\)_-+\=\{\[\}\]\|\\\:\;\'\"\,\<.\>\? 
+
+[root@localhost tmp]# rla
+ID User Date       Time     SourcePath                           TrashPath
+1  root 2016-09-24 14:07:05 /tmp/~`!@#$%^&*()_-+={[}]|\:;'",<.>? /tmp/.trash/20160924/root
+
+[root@localhost tmp]# cleantrash -R
+Find deleted files not marked in logfiles [YES/NO]:[NO]y
+Find /tmp/.trash/20160924/root/~`!@#$%^&*()_-+={[}]|\:;'",<.>?1
+
+[root@localhost tmp]# rla
+ID User   Date       Time     SourcePath                           TrashPath
+1  root   2016-09-24 14:07:05 /tmp/~`!@#$%^&*()_-+={[}]|\:;'",<.>? /tmp/.trash/20160924/root
+2  unknow 2016-09-24 14:09:03 ~`!@#$%^&*()_-+={[}]|\:;'",<.>?1     /tmp/.trash/20160924/root
+
+[root@localhost tmp]# rr 1 -cP /tmp
+Recover the files specified by idlist which recycled by user: root [YES/NO]:[NO]y
+Copy /tmp/.trash/20160924/root/~`!@#$%^&*()_-+={[}]|\:;'",<.>?_2016-09-24_14:07:05 to /tmp/~`!@#$%^&*()_-+={[}]|\:;'",<.>? succeed
+
+[root@localhost tmp]# rla
+ID User   Date       Time     SourcePath                           TrashPath
+1  root   2016-09-24 14:07:05 /tmp/~`!@#$%^&*()_-+={[}]|\:;'",<.>? /tmp/.trash/20160924/root
+2  unknow 2016-09-24 14:09:03 ~`!@#$%^&*()_-+={[}]|\:;'",<.>?1     /tmp/.trash/20160924/root
+
+[root@localhost tmp]# ls /tmp
+~`!@#$%^&*()_-+={[}]|\:;'",<.>?
+
+[root@localhost tmp]# rd -1 -n 
+[root@localhost tmp]# rla
+ID User   Date       Time     SourcePath                       TrashPath
+1  unknow 2016-09-24 14:09:03 ~`!@#$%^&*()_-+={[}]|\:;'",<.>?1 /tmp/.trash/20160924/root
+
+[root@localhost tmp]# unrm -F -u all
+Empty the trash directory recycled by user: all users [YES/NO]:[NO]y
+Delete /tmp/.trash/20160924/root/~`!@#$%^&*()_-+={[}]|\:;'",<.>?1 succeed
+[root@localhost tmp]# rla
+[root@localhost tmp]# 
+#################################################################################################################
