@@ -1072,9 +1072,9 @@ Write_Log()
 
     ID_Line=`printf "${IDS}\n" | awk -F: '$0 !~ /^$/ {
                                             if (Var[$1]=="") 
-                                                Var[$1]=$2
+                                                Var[$1]="^"$2"$"
                                             else 
-                                                Var[$1]=Var[$1]"|"$2
+                                                Var[$1]=Var[$1]"|^"$2"$"
                                          }
                                          END{
                                                 for (i in Var) 
@@ -1192,7 +1192,7 @@ do
                     read reply
                 fi
 
-                if echo $reply | grep -qiE "y|ye|yes" ||  [ "x${Called_By_Cleantrash_Mark}" = "xyes" ] ; then
+                if echo $reply | grep -qiE "y|ye|yes" || [ "x${_No_Print}" = "xyes"  ] || [ "x${Called_By_Cleantrash_Mark}" = "xyes" ] ; then
 
                     # Return ID_List
                     Get_ID_List "$S_ID_List" $Hist_List
@@ -1210,7 +1210,7 @@ do
                                 IDS="${IDS}\n`awk 'NR == '"$_ID"' {print FILENAME":"FNR}' $Hist_List 2>/dev/null`"
 
                                 [ "x${_No_Print}" != "xyes" ]  && \
-                                printf "Delete $_Print_Path succeed\n"
+                                	printf "Delete $_Print_Path succeed\n"
                             else
                                 [ "x${_No_Print}" != "xyes" ]  && \
                                 printf "\033[1mDelete $_Print_Path failed\033[0m\n"
